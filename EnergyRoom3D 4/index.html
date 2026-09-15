@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>EnergyRoom 3D</title>
+<meta name="description" content="Interaktywny symulator 3D zużycia energii — pokój, garaż i panele fotowoltaiczne.">
+<meta name="theme-color" content="#0d121a">
+<!-- iOS: run full-screen from the home screen, no browser chrome -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EnergyRoom">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<!-- Android / Chrome: installable as a standalone app -->
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ TOP BAR ============ -->
+  <header id="topbar">
+    <div class="topbar-left">
+      <div class="logo"><span class="logo-mark">⚡</span><span class="logo-text">EnergyRoom<span class="logo-3d">3D</span></span></div>
+      <div class="project-name" id="projectNameLabel" title="Kliknij aby zmienić nazwę">Moj Dom</div>
+    </div>
+
+    <div class="topbar-center">
+      <div class="mode-switch" id="modeSwitch">
+        <button class="mode-btn active" data-mode="edit">Edycja</button>
+        <button class="mode-btn" data-mode="sim">Symulacja</button>
+      </div>
+      <div class="sim-controls hidden" id="simControls">
+        <button id="playPauseBtn" class="icon-btn" title="Play/Pause (Space)">▶</button>
+        <div class="sim-clock" id="simClock">08:00</div>
+        <select id="speedSelect" class="speed-select">
+          <option value="1">1x</option>
+          <option value="10">10x</option>
+          <option value="60">60x</option>
+          <option value="600">600x</option>
+        </select>
+        <div class="skip-group">
+          <button class="skip-btn" data-skip="06:00">06:00</button>
+          <button class="skip-btn" data-skip="12:00">12:00</button>
+          <button class="skip-btn" data-skip="18:00">18:00</button>
+          <button class="skip-btn" data-skip="00:00">00:00</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <button class="tb-btn" id="btnUndo" title="Cofnij (Ctrl+Z)">↺</button>
+      <button class="tb-btn" id="btnRedo" title="Ponów (Ctrl+Y)">↻</button>
+      <button class="tb-btn" id="btnSave" title="Zapisz projekt">💾</button>
+      <button class="tb-btn" id="btnLoad" title="Wczytaj projekt">📂</button>
+      <button class="tb-btn" id="btnRoomSettings" title="Ustawienia pokoju">🏠 <span class="tb-label">Pokój</span></button>
+      <button class="tb-btn" id="btnSmartHome" title="Smart Home">🧠 <span class="tb-label">Smart Home</span></button>
+      <button class="tb-btn accent" id="btnDashboard" title="Energy Dashboard">📊 <span class="tb-label">Dashboard</span></button>
+      <button class="tb-btn" id="btnSettings" title="Ustawienia">⚙</button>
+    </div>
+  </header>
+
+  <!-- ============ ROOM BAR — switch rooms + one-slider wall visibility ============ -->
+  <div id="roomBar">
+    <div class="room-tabs" id="roomTabs"></div>
+    <div id="weatherBadge" class="weather-badge hidden"></div>
+    <div class="wallvis-control">
+      <span class="wv-icon" title="Zamknięty dom">🏠</span>
+      <input type="range" id="wallVisRange" min="0" max="100" value="100">
+      <span class="wv-icon" title="Otwarty widok (bez ścian)">👁</span>
+      <span id="wallVisLabel" class="wv-label">Zamknięty</span>
+    </div>
+  </div>
+
+  <!-- ============ MAIN LAYOUT ============ -->
+  <div id="main">
+
+    <!-- LEFT: asset panel -->
+    <aside id="leftPanel">
+      <div class="panel-tabs" id="categoryTabs"></div>
+      <div class="asset-grid" id="assetGrid"></div>
+    </aside>
+
+    <!-- CENTER: viewport -->
+    <section id="viewport">
+      <div id="threeContainer"></div>
+
+      <!-- Mobile-only: toggles for the asset/properties drawers (hidden on desktop via CSS) -->
+      <button id="btnMobileAssets" class="mobile-fab left" title="Assety">☰<span>Assety</span></button>
+      <button id="btnMobileProps" class="mobile-fab right" title="Właściwości">ℹ<span>Właściwości</span></button>
+      <div id="mobileScrim" class="mobile-scrim hidden"></div>
+
+      <div class="viewport-toolbar">
+        <div class="tool-group" id="gizmoModeGroup">
+          <button class="tool-btn active" data-mode="translate" title="Move (W)">⬌ <span class="tb-label">Move</span></button>
+          <button class="tool-btn" data-mode="rotate" title="Rotate (E)">⟳ <span class="tb-label">Rotate</span></button>
+          <button class="tool-btn" data-mode="scale" title="Scale (R)">⤢ <span class="tb-label">Scale</span></button>
+        </div>
+        <div class="tool-group">
+          <button class="tool-btn" id="btnFocus" title="Focus (F)">🎯</button>
+          <button class="tool-btn" id="btnDuplicate" title="Duplikuj (Ctrl+D)">⧉</button>
+          <button class="tool-btn danger" id="btnDelete" title="Usuń (Del)">🗑</button>
+        </div>
+        <div class="tool-group mobile-collapsible">
+          <label class="chk"><input type="checkbox" id="chkGrid" checked> Grid (G)</label>
+          <label class="chk"><input type="checkbox" id="chkSnap" checked> Snap</label>
+          <select id="gridSnapSelect" class="mini-select">
+            <option value="0.1">0.1m</option>
+            <option value="0.25" selected>0.25m</option>
+            <option value="0.5">0.5m</option>
+          </select>
+          <select id="rotSnapSelect" class="mini-select">
+            <option value="15" selected>15°</option>
+            <option value="30">30°</option>
+            <option value="45">45°</option>
+          </select>
+        </div>
+        <div class="tool-group mobile-collapsible">
+          <button class="tool-btn" data-view="home" title="Home">⌂</button>
+          <button class="tool-btn" data-view="top" title="Top">⬇ Top</button>
+          <button class="tool-btn" data-view="front" title="Front">◻ Front</button>
+          <button class="tool-btn" data-view="left" title="Left">◀ Left</button>
+          <button class="tool-btn" data-view="right" title="Right">▶ Right</button>
+        </div>
+      </div>
+
+      <div class="daynight-slider">
+        <span>🌙</span>
+        <input type="range" id="dayNightRange" min="0" max="24" step="0.1" value="10">
+        <span>☀</span>
+        <span id="dayNightLabel">10:00</span>
+      </div>
+
+      <div id="tooltip" class="tooltip hidden"></div>
+      <div id="toastArea" class="toast-area"></div>
+
+      <!-- Virtual network pet - purely cosmetic companion, lives "in the cables" -->
+      <div id="petWidget" class="pet-widget" title="Twój zwierzak sieciowy">
+        <div class="pet-avatar" id="petAvatar">✨</div>
+        <div class="pet-level-badge" id="petLevelBadge">1</div>
+      </div>
+      <div id="petPanel" class="pet-panel hidden">
+        <div class="pet-panel-header">
+          <input id="petNameInput" class="pet-name-input" value="Byte" maxlength="24">
+          <button class="modal-close" id="petPanelClose">✕</button>
+        </div>
+        <div class="pet-stage-row">
+          <div class="pet-avatar-big" id="petAvatarBig">✨</div>
+          <div class="pet-stage-info">
+            <div class="pet-stage-name" id="petStageName">Bit</div>
+            <div class="pet-level-label">Poziom <span id="petLevelNum">1</span></div>
+          </div>
+        </div>
+        <div class="xyz-head" style="grid-template-columns:1fr;margin-top:10px"><span>DOŚWIADCZENIE</span></div>
+        <div class="soc-bar"><div class="soc-fill" id="petXpFill" style="width:0%"></div></div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:3px" id="petXpLabel">0 / 80 XP</div>
+        <div class="xyz-head" style="grid-template-columns:1fr;margin-top:12px"><span>NASTRÓJ</span></div>
+        <div class="soc-bar"><div class="soc-fill" id="petMoodFill" style="width:80%;background:linear-gradient(90deg,#67c8ff,#3ee79b)"></div></div>
+        <button class="primary-btn" id="petFeedBtn" style="width:100%;margin-top:14px">🍬 Nakarm bitami danych</button>
+        <div id="petTricks" class="pet-tricks"></div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:12px;line-height:1.5">Zwierzak żyje w kablach sieci domowej — karmi się automatycznie "bitami danych", gdy Twoje urządzenia sieciowe/komputery pracują w Trybie symulacji. To czysta kosmetyka — nie wpływa na zużycie energii ani koszty.</div>
+      </div>
+
+      <div id="tutorialOverlay" class="tutorial-overlay hidden">
+        <div class="tutorial-card">
+          <h3>Witaj w EnergyRoom 3D</h3>
+          <ul>
+            <li><b>Kliknij obiekt</b>, aby go zaznaczyć</li>
+            <li><b>Przeciągnij gizmo</b>, aby przesunąć / obrócić / przeskalować</li>
+            <li><b>Zakładki pokoi</b> u góry przełączają między Pokojem a Garażem</li>
+            <li><b>Włącz/wyłącz urządzenie</b> — przełącznik Power w panelu właściwości albo podwójne kliknięcie w scenie</li>
+            <li><b>Suwak ścian</b> otwiera dom do widoku "dollhouse"</li>
+            <li>Otwórz <b>Energy Dashboard</b>, aby analizować zużycie i produkcję PV</li>
+            <li><b>Zwierzak sieciowy</b> w rogu ekranu żyje z ruchu danych — czysta zabawa, zero wpływu na energię</li>
+          </ul>
+          <label class="chk"><input type="checkbox" id="dontShowAgain"> Nie pokazuj ponownie</label>
+          <button class="primary-btn" id="closeTutorial">Rozumiem, zaczynajmy</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: properties panel -->
+    <aside id="rightPanel">
+      <div id="propEmpty" class="prop-empty">Zaznacz obiekt w scenie, aby zobaczyć jego właściwości.</div>
+      <div id="propContent" class="hidden"></div>
+    </aside>
+  </div>
+
+  <!-- ============ BOTTOM: energy monitor ============ -->
+  <footer id="energyMonitor">
+    <div class="em-card"><div class="em-label">ZUŻYCIE TERAZ</div><div class="em-value" id="emPower">0 W</div></div>
+    <div class="em-card"><div class="em-label">PRODUKCJA PV</div><div class="em-value good" id="emGen">0 W</div></div>
+    <div class="em-card"><div class="em-label">BILANS NETTO</div><div class="em-value" id="emNet">0 W</div></div>
+    <div class="em-card"><div class="em-label">DZISIAJ</div><div class="em-value" id="emToday">0.00 kWh</div></div>
+    <div class="em-card"><div class="em-label">KOSZT NETTO DZIŚ</div><div class="em-value" id="emCostToday">0.00 PLN</div></div>
+    <div class="em-card"><div class="em-label">KOSZT MIESIĄCA</div><div class="em-value" id="emCostMonth">0.00 PLN</div></div>
+    <div class="em-card"><div class="em-label">KOSZT ROKU</div><div class="em-value" id="emCostYear">0.00 PLN</div></div>
+    <div class="em-card"><div class="em-label">AKTYWNE</div><div class="em-value" id="emActive">0</div></div>
+    <div class="em-card"><div class="em-label">CO₂ (rok, szac.)</div><div class="em-value" id="emCO2">0 kg</div></div>
+    <div class="em-card hidden" id="emBatteryCard"><div class="em-label">MAGAZYN ENERGII</div><div class="em-value" id="emBattery">0%</div></div>
+    <div class="em-alerts" id="emAlerts"></div>
+  </footer>
+</div>
+
+<!-- ============ DASHBOARD MODAL ============ -->
+<div class="modal-backdrop hidden" id="dashboardModal">
+  <div class="modal wide">
+    <div class="modal-header">
+      <h2>Energy Dashboard</h2>
+      <button class="modal-close" data-close="dashboardModal">✕</button>
+    </div>
+    <div class="modal-body" id="dashboardBody">
+      <div class="dash-cards" id="dashCards"></div>
+      <div class="dash-tabs" id="dashTabs">
+        <button class="dtab active" data-tab="charts">Wykresy</button>
+        <button class="dtab" data-tab="ranking">Ranking urządzeń</button>
+        <button class="dtab" data-tab="score">Efektywność</button>
+        <button class="dtab" id="tabSolar" data-tab="solar">☀ Energia</button>
+        <button class="dtab" data-tab="scenarios">📐 Scenariusze</button>
+        <button class="dtab" data-tab="whatif">Co jeśli?</button>
+        <button class="dtab" data-tab="compare">Porównanie</button>
+      </div>
+      <div class="dash-pane" id="paneCharts">
+        <div class="chart-grid">
+          <div class="chart-box"><canvas id="chartPowerOverTime"></canvas></div>
+          <div class="chart-box"><canvas id="chartEnergyByHour"></canvas></div>
+          <div class="chart-box"><canvas id="chartEnergyByDevice"></canvas></div>
+          <div class="chart-box"><canvas id="chartCostOverTime"></canvas></div>
+          <div class="chart-box"><canvas id="chartDailyComparison"></canvas></div>
+          <div class="chart-box"><canvas id="chartWeekly"></canvas></div>
+          <div class="chart-box"><canvas id="chartMonthly"></canvas></div>
+        </div>
+      </div>
+      <div class="dash-pane hidden" id="paneRanking">
+        <div class="top5" id="top5Ranking"></div>
+        <table class="data-table" id="rankingTable"><thead><tr>
+          <th>Urządzenie</th><th>Moc</th><th>kWh/dzień</th><th>kWh/mies.</th><th>Koszt/mies.</th><th>% całości</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+      <div class="dash-pane hidden" id="paneScore">
+        <div class="score-panel" id="scorePanel"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneSolar">
+        <div id="paneSolarInner"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneScenarios">
+        <div id="scenariosPanel"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneWhatif">
+        <div class="whatif-panel" id="whatifPanel"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneCompare">
+        <div class="compare-panel" id="comparePanel"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ROOM SETTINGS MODAL ============ -->
+<div class="modal-backdrop hidden" id="roomSettingsModal">
+  <div class="modal">
+    <div class="modal-header"><h2>Room Settings</h2><button class="modal-close" data-close="roomSettingsModal">✕</button></div>
+    <div class="modal-body" id="roomSettingsBody"></div>
+  </div>
+</div>
+
+<!-- ============ SMART HOME MODAL ============ -->
+<div class="modal-backdrop hidden" id="smartHomeModal">
+  <div class="modal wide">
+    <div class="modal-header"><h2>Smart Home — Automatyzacje</h2><button class="modal-close" data-close="smartHomeModal">✕</button></div>
+    <div class="modal-body" id="smartHomeBody"></div>
+  </div>
+</div>
+
+<!-- ============ SETTINGS MODAL ============ -->
+<div class="modal-backdrop hidden" id="settingsModal">
+  <div class="modal">
+    <div class="modal-header"><h2>Ustawienia</h2><button class="modal-close" data-close="settingsModal">✕</button></div>
+    <div class="modal-body" id="settingsBody"></div>
+  </div>
+</div>
+
+<!-- ============ EDU MODAL ============ -->
+<div class="modal-backdrop hidden" id="eduModal">
+  <div class="modal">
+    <div class="modal-header"><h2 id="eduTitle">Jak działa zużycie energii?</h2><button class="modal-close" data-close="eduModal">✕</button></div>
+    <div class="modal-body" id="eduBody"></div>
+  </div>
+</div>
+
+<!-- ============ DEBUG LOG PANEL ============ -->
+<div id="logPanel" class="log-panel hidden">
+  <div class="log-header">Debug Log <button id="closeLog">✕</button></div>
+  <div class="log-body" id="logBody"></div>
+</div>
+<button id="btnToggleLog" class="log-toggle" title="Debug log">🖥</button>
+
+<!-- ================= LIBRARIES (CDN) ================= -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<!-- ================= APP (logical modules, plain scripts = one shared global scope for a simple no-build setup) ================= -->
+<script src="js/data/devices.js"></script>
+<script src="js/data/furniture.js"></script>
+<script src="js/data/solar.js"></script>
+<script src="js/data/battery.js"></script>
+<script src="js/energy/EnergyCalculator.js"></script>
+<script src="js/energy/ScheduleManager.js"></script>
+<script src="js/energy/SolarCalculator.js"></script>
+<script src="js/energy/WeatherEventManager.js"></script>
+<script src="js/energy/SimulationEngine.js"></script>
+<script src="js/scene/SceneManager.js"></script>
+<script src="js/scene/TextureFactory.js"></script>
+<script src="js/scene/RoomBuilder.js"></script>
+<script src="js/scene/EnvironmentBuilder.js"></script>
+<script src="js/scene/ModelFactory.js"></script>
+<script src="js/scene/ObjectManager.js"></script>
+<script src="js/scene/TransformManager.js"></script>
+<script src="js/analytics/AnalyticsManager.js"></script>
+<script src="js/automation/AutomationManager.js"></script>
+<script src="js/project/ProjectManager.js"></script>
+<script src="js/pet/PetManager.js"></script>
+<script src="js/ui/UIManager.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
