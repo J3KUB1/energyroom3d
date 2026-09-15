@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EnergyRoom 3D — Ultimate</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080c12; --bg2:#0d1219; --bg3:#131920; --bg4:#1a2030;
+  --border:#1e2835; --border2:#2a3545;
+  --text:#dce8f5; --text2:#7a9ab8; --text3:#4a6580;
+  --accent:#4db8ff; --accent2:#1a5fa8; --accent-glow:rgba(77,184,255,0.12);
+  --green:#39d353; --green2:#1a5c2a; --yellow:#e3b341; --red:#f47067; --orange:#f0883e; --purple:#c397f5;
+  --font:'Outfit',sans-serif; --mono:'JetBrains Mono',monospace;
+  --r:8px; --r2:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font);font-size:13px;}
+
+/* TOPBAR */
+#app{display:flex;flex-direction:column;height:100vh;}
+.topbar{display:flex;align-items:center;gap:10px;padding:0 14px;height:48px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0;z-index:30;}
+.logo{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent);letter-spacing:-.03em;white-space:nowrap;}
+.logo em{color:var(--yellow);font-style:normal;}
+.tabs{display:flex;gap:2px;margin-left:6px;overflow-x:auto;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab{font-size:11px;padding:5px 11px;border-radius:var(--r);cursor:pointer;color:var(--text2);border:1px solid transparent;white-space:nowrap;transition:all .15s;}
+.tab:hover{color:var(--text);background:var(--bg3);}
+.tab.active{color:var(--accent);background:var(--accent-glow);border-color:var(--accent2);}
+.sp{flex:1;}
+.pills{display:flex;gap:4px;}
+.pill{font-size:10px;padding:3px 9px;border-radius:20px;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--text2);transition:all .15s;}
+.pill:hover{border-color:var(--border2);color:var(--text);}
+.pill.active{background:var(--accent-glow);border-color:var(--accent);color:var(--accent);}
+.room-tabs{display:flex;gap:3px;}
+.rtab{font-size:10px;padding:3px 9px;border-radius:var(--r);cursor:pointer;border:1px solid var(--border);background:var(--bg4);color:var(--text2);transition:all .15s;}
+.rtab:hover{color:var(--text);}
+.rtab.active{background:var(--accent2);color:#fff;border-color:var(--accent);}
+.add-room-btn{font-size:10px;padding:3px 7px;border-radius:var(--r);cursor:pointer;border:1px dashed var(--border2);background:none;color:var(--text3);}
+.add-room-btn:hover{color:var(--accent);border-color:var(--accent);}
+
+/* LAYOUT */
+.body{display:flex;flex:1;overflow:hidden;}
+.view{flex:1;display:none;overflow:hidden;}
+.view.active{display:flex;}
+
+/* SIDEBAR */
+.lsb{width:185px;flex-shrink:0;border-right:1px solid var(--border);background:var(--bg2);display:flex;flex-direction:column;overflow-y:auto;}
+.lsb::-webkit-scrollbar{width:3px;}
+.lsb::-webkit-scrollbar-thumb{background:var(--border);}
+.sb-sec{padding:9px 10px;border-bottom:1px solid var(--border);}
+.sb-lbl{font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+.dev-btn{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:var(--r);cursor:pointer;border:1px solid var(--border);background:var(--bg3);margin-bottom:3px;transition:all .12s;font-size:11px;}
+.dev-btn:hover{border-color:var(--accent2);background:var(--accent-glow);}
+.dev-btn .dw{font-size:9px;color:var(--text3);margin-left:auto;}
+.env-btn{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:var(--r);cursor:pointer;border:1px solid var(--border);background:var(--bg3);margin-bottom:3px;transition:all .12s;font-size:11px;width:100%;}
+.env-btn:hover{border-color:var(--border2);}
+.env-btn.on{border-color:var(--accent2);background:var(--accent-glow);color:var(--accent);}
+.env-val{font-size:9px;color:var(--text3);margin-left:auto;}
+.weather-box{padding:7px;background:var(--bg4);border-radius:var(--r);font-size:10px;color:var(--text2);line-height:1.6;}
+.weather-big{font-size:20px;font-weight:700;color:var(--text);font-family:var(--mono);}
+
+/* RIGHT PANEL */
+.rpanel{width:196px;flex-shrink:0;border-left:1px solid var(--border);background:var(--bg2);display:flex;flex-direction:column;overflow-y:auto;}
+.rpanel::-webkit-scrollbar{width:3px;}
+.rpanel::-webkit-scrollbar-thumb{background:var(--border);}
+.rp-sec{padding:9px 12px;border-bottom:1px solid var(--border);}
+.stat-num{font-family:var(--mono);font-size:20px;font-weight:700;}
+.stat-u{font-size:10px;color:var(--text2);}
+.stat-s{font-size:10px;color:var(--text2);margin-top:1px;}
+.bar-row{display:flex;align-items:center;gap:5px;margin-bottom:3px;}
+.bar-bg{flex:1;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:2px;transition:width .5s;}
+.bar-nm{font-size:9px;color:var(--text3);width:48px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sel-panel{padding:9px 12px;border-bottom:1px solid var(--border);}
+.sel-name{font-size:11px;font-weight:600;margin-bottom:5px;}
+.sl-row{display:flex;align-items:center;gap:5px;margin-bottom:4px;}
+.sl-row label{font-size:9px;color:var(--text3);width:50px;}
+.sl-row input[type=range]{flex:1;accent-color:var(--accent);}
+.sl-val{font-family:var(--mono);font-size:9px;min-width:26px;text-align:right;}
+.btn-r{display:flex;gap:4px;margin-bottom:4px;}
+.tog{font-size:10px;padding:3px 9px;border-radius:20px;cursor:pointer;border:1px solid var(--border2);background:var(--bg4);color:var(--text2);transition:all .15s;}
+.tog.on{background:#152b1e;border-color:var(--green2);color:var(--green);}
+.rmb{font-size:10px;color:var(--text3);background:none;border:none;cursor:pointer;padding:3px 6px;border-radius:4px;}
+.rmb:hover{background:rgba(244,112,103,.12);color:var(--red);}
+.xp-bg{width:100%;height:5px;background:var(--bg4);border-radius:3px;overflow:hidden;margin-bottom:3px;}
+.xp-fill{height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:3px;transition:width .6s;}
+.xp-row{display:flex;justify-content:space-between;font-size:9px;color:var(--text2);}
+.badge{display:inline-flex;align-items:center;gap:2px;font-size:9px;padding:1px 5px;border-radius:8px;background:rgba(77,184,255,.1);color:var(--accent);margin:2px 2px 0 0;}
+.tip-box{margin:8px 10px;padding:7px 9px;border-radius:var(--r);background:rgba(227,179,65,.08);border:1px solid rgba(227,179,65,.25);font-size:10px;color:var(--yellow);line-height:1.5;}
+.co2-row{display:flex;align-items:center;gap:8px;}
+.voice-btn{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:20px;font-size:10px;cursor:pointer;border:1px solid var(--border2);background:var(--bg4);color:var(--text2);transition:all .15s;margin-top:6px;}
+.voice-btn:hover{border-color:var(--accent);color:var(--accent);}
+.voice-btn.speaking{border-color:var(--green);color:var(--green);animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* CANVAS */
+#c3{display:block;cursor:grab;}
+#c3:active{cursor:grabbing;}
+.hint3d{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(8,12,18,.85);border:1px solid var(--border);color:var(--text2);font-size:10px;padding:4px 12px;border-radius:20px;pointer-events:none;white-space:nowrap;}
+.day-indicator{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(8,12,18,.85);border:1px solid var(--border);color:var(--text2);font-size:10px;padding:4px 14px;border-radius:20px;pointer-events:none;display:flex;align-items:center;gap:8px;}
+.sun-icon{font-size:14px;transition:opacity .5s;}
+.time-slider-wrap{position:absolute;bottom:38px;left:50%;transform:translateX(-50%);background:rgba(8,12,18,.9);border:1px solid var(--border);border-radius:20px;padding:5px 14px;display:flex;align-items:center;gap:10px;}
+.time-slider-wrap label{font-size:10px;color:var(--text3);}
+.time-slider-wrap input{width:140px;accent-color:var(--accent);}
+.time-val{font-family:var(--mono);font-size:10px;color:var(--accent);min-width:38px;}
+
+/* TIMELINE */
+.tl-view{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+.tl-hdr{padding:12px 18px 0;border-bottom:1px solid var(--border);background:var(--bg2);}
+.tl-title{font-size:14px;font-weight:600;margin-bottom:8px;}
+.tl-body{flex:1;overflow-y:auto;padding:10px 18px;}
+.tl-dev-row{display:flex;align-items:center;gap:7px;margin-bottom:5px;}
+.tl-dev-lbl{width:106px;font-size:10px;color:var(--text2);display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.tl-hrs{display:flex;gap:1px;flex:1;}
+.tl-cell{flex:1;height:20px;border-radius:2px;cursor:pointer;background:var(--bg3);border:1px solid transparent;transition:background .1s;}
+.tl-cell:hover{background:var(--bg4);}
+.tl-hlabels{display:flex;padding-left:113px;margin-bottom:3px;}
+.tl-hl{flex:1;font-size:7px;color:var(--text3);font-family:var(--mono);text-align:center;}
+.tl-footer{padding:10px 18px;border-top:1px solid var(--border);background:var(--bg2);display:flex;gap:18px;align-items:center;}
+.tl-stat{display:flex;flex-direction:column;}
+.tl-sv{font-family:var(--mono);font-size:15px;font-weight:700;}
+.tl-sl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;}
+
+/* COMPARE */
+.cmp-view{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;}
+.cmp-hdr{padding:12px 18px;border-bottom:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;gap:12px;}
+.cmp-hdr h2{font-size:14px;font-weight:600;}
+.cmp-body{flex:1;display:flex;overflow:hidden;}
+.cmp-col{flex:1;display:flex;flex-direction:column;border-right:1px solid var(--border);overflow-y:auto;}
+.cmp-col:last-child{border-right:none;}
+.cmp-col-hdr{padding:9px 13px;border-bottom:1px solid var(--border);background:var(--bg2);font-size:11px;font-weight:500;display:flex;align-items:center;gap:8px;}
+.cmp-sel{font-size:10px;padding:3px 7px;background:var(--bg4);border:1px solid var(--border);color:var(--text);border-radius:var(--r);cursor:pointer;}
+.cmp-stats{padding:10px 13px;border-bottom:1px solid var(--border);}
+.cmp-st{display:flex;justify-content:space-between;margin-bottom:4px;}
+.cmp-sl{font-size:10px;color:var(--text3);}
+.cmp-sv{font-family:var(--mono);font-size:11px;font-weight:700;}
+.cmp-devs{padding:9px 13px;}
+.cmp-dr{display:flex;align-items:center;gap:5px;margin-bottom:3px;font-size:10px;}
+.cmp-dw{font-size:9px;color:var(--text3);margin-left:auto;font-family:var(--mono);}
+.cmp-chart-sec{padding:10px 18px;border-top:1px solid var(--border);background:var(--bg2);}
+.cmp-chart-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px;}
+
+/* WHATIF */
+.wi-view{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow-y:auto;}
+.wi-hdr{padding:12px 18px;border-bottom:1px solid var(--border);background:var(--bg2);}
+.wi-hdr h2{font-size:14px;font-weight:600;margin-bottom:3px;}
+.wi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:9px;padding:12px 18px;}
+.wi-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:13px;transition:border-color .2s;}
+.wi-card:hover{border-color:var(--accent2);}
+.wc-top{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
+.wc-ico{font-size:20px;}
+.wc-tit{font-size:12px;font-weight:600;}
+.wc-sub{font-size:9px;color:var(--text3);}
+.wc-sl{display:flex;align-items:center;gap:7px;margin-bottom:5px;}
+.wc-sl label{font-size:9px;color:var(--text3);width:65px;}
+.wc-sl input{flex:1;accent-color:var(--accent);}
+.wc-slv{font-family:var(--mono);font-size:9px;min-width:28px;text-align:right;}
+.wc-savs{display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+.wc-si{display:flex;flex-direction:column;align-items:center;}
+.wc-sv{font-family:var(--mono);font-size:12px;font-weight:700;}
+.wc-sv.g{color:var(--green);}
+.wc-sv.p{color:var(--purple);}
+.wc-slbl{font-size:8px;color:var(--text3);margin-top:1px;}
+
+/* LEADER */
+.lb-view{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow-y:auto;}
+.lb-hdr{padding:12px 18px;border-bottom:1px solid var(--border);background:var(--bg2);}
+.lb-hdr h2{font-size:14px;font-weight:600;margin-bottom:3px;}
+.lb-tbl{width:100%;border-collapse:collapse;}
+.lb-tbl th{font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;padding:7px 13px;text-align:left;border-bottom:1px solid var(--border);}
+.lb-tbl td{padding:7px 13px;border-bottom:1px solid var(--border);font-size:11px;}
+.lb-tbl tr:hover td{background:var(--bg3);}
+.rnk{display:inline-flex;width:19px;height:19px;border-radius:50%;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-family:var(--mono);}
+.r1{background:rgba(227,179,65,.15);color:var(--yellow);}
+.r2{background:rgba(139,148,158,.15);color:#8b949e;}
+.r3{background:rgba(240,136,62,.15);color:var(--orange);}
+.rn{background:var(--bg4);color:var(--text3);}
+.you td{background:rgba(77,184,255,.05)!important;}
+.sc-bar{height:3px;border-radius:2px;margin-top:2px;}
+
+/* AI CHAT */
+.ai-view{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;}
+.chat-msgs{flex:1;overflow-y:auto;padding:12px 18px;display:flex;flex-direction:column;gap:8px;}
+.chat-msgs::-webkit-scrollbar{width:3px;}
+.chat-msgs::-webkit-scrollbar-thumb{background:var(--border);}
+.msg{max-width:76%;}
+.msg.user{align-self:flex-end;}
+.msg.ai{align-self:flex-start;}
+.msg-b{padding:9px 12px;border-radius:var(--r2);font-size:12px;line-height:1.65;}
+.msg.user .msg-b{background:var(--accent2);color:#fff;border-bottom-right-radius:4px;}
+.msg.ai .msg-b{background:var(--bg3);border:1px solid var(--border);border-bottom-left-radius:4px;}
+.msg-t{font-size:8px;color:var(--text3);margin-top:2px;padding:0 4px;}
+.msg.user .msg-t{text-align:right;}
+.chat-bar{padding:9px 13px;border-top:1px solid var(--border);background:var(--bg2);display:flex;gap:7px;}
+.chat-inp{flex:1;padding:7px 11px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg3);color:var(--text);font-family:var(--font);font-size:12px;outline:none;}
+.chat-inp:focus{border-color:var(--accent2);}
+.chat-snd{padding:7px 13px;border-radius:var(--r);background:var(--accent2);color:#fff;border:none;cursor:pointer;font-size:12px;font-family:var(--font);}
+.chat-snd:hover{background:var(--accent);}
+.chat-snd:disabled{background:var(--bg4);color:var(--text3);cursor:not-allowed;}
+.qps{display:flex;gap:4px;flex-wrap:wrap;padding:5px 13px 0;}
+.qp{font-size:10px;padding:3px 8px;border-radius:20px;border:1px solid var(--border2);color:var(--text2);cursor:pointer;background:var(--bg3);transition:all .12s;}
+.qp:hover{border-color:var(--accent);color:var(--accent);}
+.tdot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--text3);animation:blink 1.2s infinite;margin:0 1px;}
+.tdot:nth-child(2){animation-delay:.2s;}
+.tdot:nth-child(3){animation-delay:.4s;}
+@keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+
+/* HISTORY */
+.hist-view{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow-y:auto;}
+.hist-hdr{padding:12px 18px;border-bottom:1px solid var(--border);background:var(--bg2);}
+.hist-hdr h2{font-size:14px;font-weight:600;margin-bottom:3px;}
+.hist-cards{display:flex;flex-direction:column;gap:8px;padding:12px 18px;}
+.hist-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:12px 15px;cursor:pointer;transition:border-color .2s;}
+.hist-card:hover{border-color:var(--accent2);}
+.hc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+.hc-title{font-size:12px;font-weight:500;}
+.hc-date{font-size:10px;color:var(--text3);}
+.hc-stats{display:flex;gap:14px;}
+.hc-st{display:flex;flex-direction:column;}
+.hc-sv{font-family:var(--mono);font-size:13px;font-weight:700;}
+.hc-sl{font-size:9px;color:var(--text3);}
+.hc-devs{margin-top:7px;font-size:10px;color:var(--text2);}
+.hist-empty{padding:30px 18px;color:var(--text3);font-size:12px;}
+.save-btn{font-size:11px;padding:5px 12px;border-radius:var(--r);background:var(--accent2);color:#fff;border:none;cursor:pointer;margin-left:auto;}
+.save-btn:hover{background:var(--accent);}
+
+/* CERT */
+.cert-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(8,12,18,.95);z-index:100;display:none;align-items:center;justify-content:center;}
+.cert-overlay.show{display:flex;}
+.cert-box{background:var(--bg2);border:2px solid var(--green);border-radius:var(--r2);padding:28px;max-width:440px;width:90%;text-align:center;position:relative;}
+.cert-close{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;}
+.cert-icon{font-size:52px;margin-bottom:10px;}
+.cert-title{font-size:20px;font-weight:700;color:var(--green);margin-bottom:5px;}
+.cert-sub{font-size:12px;color:var(--text2);margin-bottom:15px;}
+.cert-stats{display:flex;justify-content:center;gap:24px;margin-bottom:18px;}
+.cert-st{display:flex;flex-direction:column;}
+.cert-sv{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--accent);}
+.cert-sl{font-size:9px;color:var(--text3);}
+.cert-share-btn{padding:8px 18px;border-radius:var(--r);background:var(--green2);color:var(--green);border:1px solid var(--green);cursor:pointer;font-size:12px;margin:3px;}
+.cert-print-btn{padding:8px 18px;border-radius:var(--r);background:var(--accent2);color:#fff;border:none;cursor:pointer;font-size:12px;margin:3px;}
+
+/* INVOICE CALC */
+.inv-view{flex:1;display:flex;flex-direction:column;background:var(--bg);overflow-y:auto;}
+.inv-hdr{padding:12px 18px;border-bottom:1px solid var(--border);background:var(--bg2);}
+.inv-hdr h2{font-size:14px;font-weight:600;margin-bottom:3px;}
+.inv-body{padding:16px 18px;max-width:640px;}
+.inv-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.inv-row label{font-size:11px;color:var(--text2);width:160px;}
+.inv-inp{flex:1;padding:7px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg3);color:var(--text);font-family:var(--mono);font-size:12px;outline:none;}
+.inv-inp:focus{border-color:var(--accent2);}
+.inv-unit{font-size:10px;color:var(--text3);width:40px;}
+.inv-result{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-top:14px;}
+.inv-res-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;}
+.inv-res-lbl{font-size:11px;color:var(--text2);}
+.inv-res-val{font-family:var(--mono);font-size:13px;font-weight:700;}
+.inv-res-val.green{color:var(--green);}
+.inv-res-val.red{color:var(--red);}
+.inv-res-sep{border:none;border-top:1px solid var(--border);margin:8px 0;}
+.inv-btn{padding:8px 16px;border-radius:var(--r);background:var(--accent2);color:#fff;border:none;cursor:pointer;font-size:12px;font-family:var(--font);margin-top:10px;}
+
+/* PRINT PDF */
+@media print{
+  .topbar,.lsb,.rpanel,.tabs,.pills,.room-tabs,.time-slider-wrap,.hint3d,.day-indicator{display:none!important;}
+  body{background:#fff;color:#000;}
+  #print-report{display:block!important;}
+  .view,.body{display:block!important;}
+}
+#print-report{display:none;padding:24px;}
+.pr-title{font-size:22px;font-weight:700;margin-bottom:4px;}
+.pr-date{font-size:12px;color:#666;margin-bottom:18px;}
+.pr-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px;}
+.pr-card{border:1px solid #ddd;border-radius:8px;padding:12px;}
+.pr-card h3{font-size:11px;color:#888;margin-bottom:5px;}
+.pr-card .v{font-size:22px;font-weight:700;}
+.pr-devs{border-collapse:collapse;width:100%;margin-bottom:18px;}
+.pr-devs th,.pr-devs td{border:1px solid #eee;padding:7px 10px;text-align:left;font-size:12px;}
+.pr-devs th{background:#f5f5f5;font-weight:600;}
+.pr-recs{background:#f0f9f0;border:1px solid #c0e0c0;border-radius:8px;padding:12px;}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="logo">⚡ Energy<em>Room</em></div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('room',this)">🏠 3D</div>
+      <div class="tab" onclick="switchTab('tl',this)">🕐 Oś</div>
+      <div class="tab" onclick="switchTab('cmp',this)">⚖️ Porównaj</div>
+      <div class="tab" onclick="switchTab('wi',this)">🔮 Co jeśli</div>
+      <div class="tab" onclick="switchTab('inv',this)">🧾 Rachunek</div>
+      <div class="tab" onclick="switchTab('lb',this)">🏆 Ranking</div>
+      <div class="tab" onclick="switchTab('hist',this)">📚 Historia</div>
+      <div class="tab" onclick="switchTab('ai',this)">🤖 AI</div>
+    </div>
+    <div class="sp"></div>
+    <div class="room-tabs" id="room-tabs">
+      <div class="rtab active" onclick="switchRoom(0,this)">🛋️ Salon</div>
+      <div class="rtab" onclick="switchRoom(1,this)">🛏️ Sypialnia</div>
+      <div class="rtab" onclick="switchRoom(2,this)">🍳 Kuchnia</div>
+      <button class="add-room-btn" onclick="addRoom()">+ pokój</button>
+    </div>
+    <div style="width:8px;"></div>
+    <div class="pills" id="sc-pills">
+      <div class="pill active" onclick="loadScenario('blank',this)">Pusty</div>
+      <div class="pill" onclick="loadScenario('student',this)">Uczeń</div>
+      <div class="pill" onclick="loadScenario('gamer',this)">Gracz</div>
+      <div class="pill" onclick="loadScenario('remote',this)">Zdalna</div>
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- ══════════════ ROOM 3D ══════════════ -->
+    <div id="view-room" class="view active" style="position:relative;">
+      <div class="lsb">
+        <div class="sb-sec">
+          <div class="sb-lbl">Urządzenia</div>
+          <div id="dev-list"></div>
+        </div>
+        <div class="sb-sec">
+          <div class="sb-lbl">Środowisko</div>
+          <button class="env-btn" id="win-btn" onclick="toggleEnv('window')">🪟 Okno<span class="env-val" id="win-st">zamknięte</span></button>
+          <button class="env-btn" id="door-btn" onclick="toggleEnv('door')">🚪 Drzwi<span class="env-val" id="door-st">zamknięte</span></button>
+        </div>
+        <div class="sb-sec">
+          <div class="sb-lbl">Pogoda na żywo</div>
+          <div class="weather-box" id="weather-box">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span id="w-icon">🌤️</span>
+              <span class="weather-big" id="w-temp">–</span>
+              <span style="font-size:10px;color:var(--text3);">°C</span>
+            </div>
+            <div id="w-desc" style="color:var(--text2);">Ładowanie pogody...</div>
+            <div id="w-effect" style="color:var(--yellow);margin-top:3px;font-size:9px;"></div>
+          </div>
+        </div>
+        <div class="sb-sec">
+          <div class="sb-lbl">Głos asystenta</div>
+          <button class="voice-btn" id="voice-btn" onclick="toggleVoice()">🔊 <span id="voice-lbl">Włącz</span></button>
+        </div>
+      </div>
+      <div style="position:relative;flex:1;overflow:hidden;">
+        <canvas id="c3"></canvas>
+        <div class="hint3d" id="hint3d">Kliknij urządzenie · przeciągnij = obróć · scroll = zoom</div>
+        <div class="day-indicator" id="day-ind">
+          <span class="sun-icon" id="sun-ico">☀️</span>
+          <span id="time-lbl">12:00</span>
+          <span id="sky-lbl" style="font-size:10px;color:var(--text3);">Południe</span>
+        </div>
+        <div class="time-slider-wrap">
+          <label>Pora dnia</label>
+          <input type="range" id="time-slider" min="0" max="23" step="1" value="12" oninput="setDayTime(this.value)">
+          <span class="time-val" id="time-val">12:00</span>
+        </div>
+      </div>
+      <div class="rpanel">
+        <div class="rp-sec">
+          <div class="sb-lbl" id="room-stat-title">Salon — dziś</div>
+          <div><span class="stat-num" id="r-kwh">0.00</span><span class="stat-u"> kWh</span></div>
+          <div class="stat-s" id="r-day">≈ 0.00 zł</div>
+        </div>
+        <div class="rp-sec">
+          <div class="sb-lbl">Wszystkie pokoje</div>
+          <div><span class="stat-num" id="r-total">0.00</span><span class="stat-u"> kWh</span></div>
+          <div class="stat-s" id="r-total-cost">dom: ≈ 0.00 zł/dzień</div>
+        </div>
+        <div class="rp-sec">
+          <div class="sb-lbl">CO₂ / miesiąc</div>
+          <div class="co2-row">
+            <span style="font-size:18px;">🌳</span>
+            <div>
+              <div><span class="stat-num" style="font-size:16px;" id="r-co2">0.0</span><span class="stat-u"> kg</span></div>
+              <div class="stat-s" id="r-trees"></div>
+            </div>
+          </div>
+        </div>
+        <div class="rp-sec">
+          <div class="sb-lbl">Rozkład</div>
+          <div id="r-bars"></div>
+        </div>
+        <div class="sel-panel" id="sel-panel" style="display:none;">
+          <div class="sb-lbl">Edytujesz</div>
+          <div class="sel-name" id="sel-nm"></div>
+          <div class="btn-r">
+            <button class="tog on" id="tog-btn" onclick="toggleSel()">Wł.</button>
+            <button class="rmb" onclick="removeSel()">Usuń ✕</button>
+          </div>
+          <div class="sl-row">
+            <label>Czas</label>
+            <input type="range" id="h-sl" min="0" max="24" step=".5" value="4" oninput="updH(this.value)">
+            <span class="sl-val" id="h-val">4h</span>
+          </div>
+          <div style="font-size:9px;color:var(--text3);" id="sel-kwh"></div>
+        </div>
+        <div class="rp-sec">
+          <div class="sb-lbl">Gamifikacja</div>
+          <div class="xp-bg"><div class="xp-fill" id="xp-fill" style="width:0%"></div></div>
+          <div class="xp-row"><span id="xp-lvl">Poziom 1</span><span id="xp-pts">0 XP</span></div>
+          <div id="badges" style="margin-top:4px;"></div>
+          <button class="voice-btn" style="margin-top:6px;" onclick="checkCert()">🏅 Sprawdź certyfikat</button>
+        </div>
+        <div class="tip-box" id="r-tip">Dodaj urządzenia aby zobaczyć zużycie energii.</div>
+      </div>
+    </div>
+
+    <!-- ══════════════ TIMELINE ══════════════ -->
+    <div id="view-tl" class="view" style="flex-direction:column;">
+      <div class="tl-view">
+        <div class="tl-hdr">
+          <div class="tl-title">🕐 Harmonogram — kiedy używasz urządzeń?</div>
+          <div style="font-size:10px;color:var(--text2);padding-bottom:9px;">Kliknij i przeciągnij aby zaznaczać godziny użycia</div>
+        </div>
+        <div class="tl-body">
+          <div class="tl-hlabels" id="tl-hlabels"></div>
+          <div id="tl-rows"></div>
+        </div>
+        <div class="tl-footer">
+          <div class="tl-stat"><span class="tl-sv" id="tl-kwh">0.00</span><span class="tl-sl">kWh dziś</span></div>
+          <div class="tl-stat"><span class="tl-sv" id="tl-cost">0.00 zł</span><span class="tl-sl">koszt dziś</span></div>
+          <div class="tl-stat"><span class="tl-sv" id="tl-peak">–</span><span class="tl-sl">szczyt mocy</span></div>
+          <div style="flex:1;"></div>
+          <div style="font-size:9px;color:var(--text3);">Stawka 0.75 zł/kWh</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════ COMPARE ══════════════ -->
+    <div id="view-cmp" class="view" style="flex-direction:column;">
+      <div class="cmp-view">
+        <div class="cmp-hdr"><h2>⚖️ Porównanie scenariuszy</h2></div>
+        <div class="cmp-body">
+          <div class="cmp-col">
+            <div class="cmp-col-hdr">Scenariusz A
+              <select class="cmp-sel" id="cmp-a" onchange="renderCompare()">
+                <option value="student">Uczeń</option>
+                <option value="gamer">Gracz</option>
+                <option value="remote">Praca zdalna</option>
+                <option value="current">Aktualny</option>
+              </select>
+            </div>
+            <div class="cmp-stats" id="cmp-a-stats"></div>
+            <div class="cmp-devs" id="cmp-a-devs"></div>
+          </div>
+          <div class="cmp-col">
+            <div class="cmp-col-hdr">Scenariusz B
+              <select class="cmp-sel" id="cmp-b" onchange="renderCompare()">
+                <option value="gamer" selected>Gracz</option>
+                <option value="student">Uczeń</option>
+                <option value="remote">Praca zdalna</option>
+                <option value="current">Aktualny</option>
+              </select>
+            </div>
+            <div class="cmp-stats" id="cmp-b-stats"></div>
+            <div class="cmp-devs" id="cmp-b-devs"></div>
+          </div>
+        </div>
+        <div class="cmp-chart-sec">
+          <div class="cmp-chart-lbl">kWh / dzień — porównanie</div>
+          <canvas id="cmp-chart" style="width:100%;height:70px;"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════ WHAT-IF ══════════════ -->
+    <div id="view-wi" class="view" style="flex-direction:column;">
+      <div class="wi-view">
+        <div class="wi-hdr"><h2>🔮 Co jeśli? — symulator zmian</h2><div style="font-size:10px;color:var(--text2);margin-top:2px;">Przetestuj jak zmiany wpłyną na rachunek za prąd</div></div>
+        <div class="wi-grid" id="wi-grid"></div>
+      </div>
+    </div>
+
+    <!-- ══════════════ INVOICE ══════════════ -->
+    <div id="view-inv" class="view" style="flex-direction:column;">
+      <div class="inv-view">
+        <div class="inv-hdr"><h2>🧾 Kalkulator rachunku</h2><div style="font-size:10px;color:var(--text2);margin-top:2px;">Porównaj swój rzeczywisty rachunek z symulacją</div></div>
+        <div class="inv-body">
+          <div class="inv-row"><label>Kwota na rachunku</label><input class="inv-inp" id="inv-amount" type="number" placeholder="0.00" oninput="calcInvoice()"><span class="inv-unit">zł</span></div>
+          <div class="inv-row"><label>Zużycie na rachunku</label><input class="inv-inp" id="inv-kwh" type="number" placeholder="0" oninput="calcInvoice()"><span class="inv-unit">kWh</span></div>
+          <div class="inv-row"><label>Okres rozliczeniowy</label><input class="inv-inp" id="inv-days" type="number" value="30" oninput="calcInvoice()"><span class="inv-unit">dni</span></div>
+          <div class="inv-row"><label>Taryfa</label>
+            <select class="inv-inp" id="inv-tariff" onchange="calcInvoice()">
+              <option value="0.75">G11 — całodobowa (0.75 zł)</option>
+              <option value="0.52">G12 — nocna (0.52 zł)</option>
+              <option value="0.96">G12 — dzienna (0.96 zł)</option>
+            </select>
+            <span class="inv-unit"></span>
+          </div>
+          <div class="inv-result" id="inv-result"></div>
+          <button class="inv-btn" onclick="exportPDF()">📥 Eksportuj raport PDF</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════ LEADERBOARD ══════════════ -->
+    <div id="view-lb" class="view" style="flex-direction:column;">
+      <div class="lb-view">
+        <div class="lb-hdr"><h2>🏆 Ranking oszczędności</h2><div style="font-size:10px;color:var(--text2);margin-top:2px;">Porównaj swoje zużycie z innymi</div></div>
+        <table class="lb-tbl"><thead><tr>
+          <th>#</th><th>Użytkownik</th><th>Scenariusz</th><th>kWh/d</th><th>zł/m.</th><th>CO₂ kg</th><th>Wynik</th>
+        </tr></thead><tbody id="lb-body"></tbody></table>
+      </div>
+    </div>
+
+    <!-- ══════════════ HISTORY ══════════════ -->
+    <div id="view-hist" class="view" style="flex-direction:column;">
+      <div class="hist-view">
+        <div class="hist-hdr" style="display:flex;align-items:center;">
+          <div><h2>📚 Historia sesji</h2><div style="font-size:10px;color:var(--text2);margin-top:2px;">Poprzednie konfiguracje pokoju</div></div>
+          <button class="save-btn" onclick="saveSession()">💾 Zapisz sesję</button>
+        </div>
+        <div class="hist-cards" id="hist-cards"></div>
+      </div>
+    </div>
+
+    <!-- ══════════════ AI CHAT ══════════════ -->
+    <div id="view-ai" class="view" style="flex-direction:column;">
+      <div class="ai-view">
+        <div class="qps">
+          <div class="qp" onclick="sendQ(this)">Jak oszczędzić prąd?</div>
+          <div class="qp" onclick="sendQ(this)">Oceń moje urządzenia</div>
+          <div class="qp" onclick="sendQ(this)">Ile drzew posadzę?</div>
+          <div class="qp" onclick="sendQ(this)">Porównaj ze średnią Polaka</div>
+          <div class="qp" onclick="sendQ(this)">Jaki scenariusz jest najtańszy?</div>
+        </div>
+        <div class="chat-msgs" id="chat-msgs">
+          <div class="msg ai"><div class="msg-b">👋 Cześć! Jestem Twoim asystentem energetycznym. Analizuję Twój pokój na bieżąco. Dodaj urządzenia w widoku 3D, a pomogę Ci zoptymalizować zużycie!</div><div class="msg-t">teraz</div></div>
+        </div>
+        <div class="chat-bar">
+          <input class="chat-inp" id="chat-inp" placeholder="Zapytaj o swoje zużycie energii..." onkeydown="if(event.key==='Enter')sendChat()">
+          <button class="chat-snd" id="chat-snd" onclick="sendChat()">Wyślij</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CERT OVERLAY -->
+<div class="cert-overlay" id="cert-overlay">
+  <div class="cert-box">
+    <button class="cert-close" onclick="document.getElementById('cert-overlay').classList.remove('show')">✕</button>
+    <div class="cert-icon">🏅</div>
+    <div class="cert-title">Certyfikat Zielonego Domu</div>
+    <div class="cert-sub" id="cert-sub">Twój dom jest poniżej średniego zużycia energii!</div>
+    <div class="cert-stats" id="cert-stats"></div>
+    <div id="cert-grade" style="font-size:28px;font-weight:700;margin-bottom:12px;"></div>
+    <button class="cert-share-btn" onclick="shareCert()">📤 Udostępnij</button>
+    <button class="cert-print-btn" onclick="exportPDF()">📥 Pobierz PDF</button>
+  </div>
+</div>
+
+<!-- PRINT REPORT -->
+<div id="print-report">
+  <div class="pr-title">⚡ EnergyRoom — Raport zużycia energii</div>
+  <div class="pr-date" id="pr-date"></div>
+  <div class="pr-grid" id="pr-grid"></div>
+  <table class="pr-devs" id="pr-devs"></table>
+  <div class="pr-recs" id="pr-recs"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════
+const PRICE = 0.75, CO2 = 0.7;
+const DEFS = [
+  {id:'tv',   name:'Telewizor',   icon:'📺',watts:120, color:0x4db8ff,shape:'flat'},
+  {id:'pc',   name:'Komputer',    icon:'🖥️',watts:200, color:0x39d353,shape:'tower'},
+  {id:'lamp', name:'Lampa',       icon:'💡',watts:15,  color:0xe3b341,shape:'lamp'},
+  {id:'fridge',name:'Lodówka',    icon:'🧊',watts:90,  color:0x0f9e76,shape:'tall'},
+  {id:'ac',   name:'Klimatyzacja',icon:'❄️',watts:1500,color:0xc397f5,shape:'flat'},
+  {id:'game', name:'Konsola',     icon:'🎮',watts:150, color:0xf47067,shape:'box'},
+  {id:'kettle',name:'Czajnik',    icon:'☕',watts:2000,color:0xf0883e,shape:'box'},
+  {id:'phone',name:'Tel. ładow.', icon:'🔌',watts:18,  color:0x7a9ab8,shape:'box'},
+  {id:'wash', name:'Pralka',      icon:'🌀',watts:500, color:0x1a5fa8,shape:'tall'},
+  {id:'micro',name:'Mikrofala',   icon:'📡',watts:1000,color:0x6e7681,shape:'box'},
+  {id:'sofa', name:'Sofa',        icon:'🛋️',watts:0,   color:0x5a3e28,shape:'sofa'},
+  {id:'bed',  name:'Łóżko',       icon:'🛏️',watts:0,   color:0x2e4060,shape:'bed'},
+  {id:'table',name:'Stół',        icon:'🪑',watts:0,   color:0x3d2b1a,shape:'table'},
+  {id:'plant',name:'Roślina',     icon:'🌿',watts:0,   color:0x1f5c30,shape:'plant'},
+];
+const SCENARIOS = {
+  student:[{id:'lamp',h:6},{id:'pc',h:4},{id:'phone',h:8},{id:'tv',h:2}],
+  gamer:  [{id:'game',h:5},{id:'tv',h:3},{id:'pc',h:4},{id:'lamp',h:4},{id:'kettle',h:.5}],
+  remote: [{id:'pc',h:8},{id:'lamp',h:8},{id:'ac',h:4},{id:'phone',h:6},{id:'kettle',h:1}],
+};
+const FAKE_LB = [
+  {name:'eko_ania',sc:'Uczeń',kwh:1.8},{name:'piotr_w',sc:'Uczeń',kwh:1.5},
+  {name:'adam_k',sc:'Praca zdalna',kwh:3.2},{name:'mama_ewa',sc:'Uczeń',kwh:2.4},
+  {name:'remote_m',sc:'Praca zdalna',kwh:4.7},{name:'gracz99',sc:'Gracz',kwh:5.1},
+  {name:'junior_g',sc:'Gracz',kwh:6.3},
+];
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+let rooms = [
+  {name:'Salon',    placed:[], nextUid:1},
+  {name:'Sypialnia',placed:[], nextUid:1},
+  {name:'Kuchnia',  placed:[], nextUid:1},
+];
+let curRoom = 0;
+let selUid = null;
+let envState = {window:false, door:false};
+let dayHour = 12;
+let voiceEnabled = false;
+let weatherData = null;
+let sessions = JSON.parse(localStorage.getItem('er_sessions')||'[]');
+let chatHistory = [];
+
+function placed() { return rooms[curRoom].placed; }
+
+// ═══════════════════════════════════════
+// THREE.JS
+// ═══════════════════════════════════════
+const renderer = new THREE.WebGLRenderer({canvas:document.getElementById('c3'),antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x080c12,1);
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x080c12,.055);
+
+const camera = new THREE.PerspectiveCamera(44,1,.1,100);
+camera.position.set(0,3.5,6.2); camera.lookAt(0,.8,0);
+
+function resizeR(){
+  const c=document.getElementById('c3'),p=c.parentElement;
+  renderer.setSize(p.clientWidth,p.clientHeight);
+  camera.aspect=p.clientWidth/p.clientHeight; camera.updateProjectionMatrix();
+}
+resizeR(); window.addEventListener('resize',resizeR);
+
+// Lights
+const ambientLight = new THREE.AmbientLight(0x182030,1.3); scene.add(ambientLight);
+const sun = new THREE.DirectionalLight(0xfff8e8,1.1);
+sun.position.set(4,7,5); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-8; sun.shadow.camera.right=8;
+sun.shadow.camera.top=8; sun.shadow.camera.bottom=-8;
+sun.shadow.camera.far=40; scene.add(sun);
+const fillLight = new THREE.DirectionalLight(0x304080,.4);
+fillLight.position.set(-3,2,-3); scene.add(fillLight);
+const windowLight = new THREE.PointLight(0x8ab8d8,0,6);
+windowLight.position.set(0,2.2,-4); scene.add(windowLight);
+
+// Day/night sky colors
+const SKY_COLORS = [
+  [8,12,18],[10,14,22],[14,20,32],[25,35,60],[50,70,120],
+  [90,120,180],[150,180,220],[200,210,230],[220,220,200],[230,210,170],
+  [220,200,150],[200,180,130],[180,160,110],[150,130,90],[120,100,70],
+  [90,75,55],[70,55,40],[50,40,30],[30,25,22],[15,18,22],
+  [8,12,18],[8,12,18],[8,12,18],[8,12,18]
+];
+
+function setDayTime(h) {
+  dayHour = parseInt(h);
+  const labels = ['Północ','1:00','2:00','3:00','4:00','5:00','6:00 ☀️','7:00','8:00','9:00','10:00','11:00','12:00 ☀️','13:00','14:00','15:00','16:00','17:00','18:00 🌅','19:00','20:00 🌙','21:00','22:00','23:00'];
+  document.getElementById('time-lbl').textContent = labels[h];
+  document.getElementById('time-val').textContent = String(h).padStart(2,'0')+':00';
+  const icons = ['🌑','🌑','🌑','🌑','🌑','🌅','🌅','☀️','☀️','☀️','☀️','☀️','☀️','☀️','☀️','☀️','🌅','🌅','🌅','🌙','🌙','🌙','🌑','🌑'];
+  document.getElementById('sun-ico').textContent = icons[h];
+  const skyLbls=['Noc','Noc','Noc','Noc','Noc','Świt','Wschód','Rano','Rano','Przedpołudnie','Przedpołudnie','Południe','Południe','Popołudnie','Popołudnie','Popołudnie','Zmierzch','Zachód','Zmierzch','Wieczór','Noc','Noc','Noc','Noc'];
+  document.getElementById('sky-lbl').textContent = skyLbls[h];
+  const [r,g,b] = SKY_COLORS[h];
+  renderer.setClearColor(new THREE.Color(r/255,g/255,b/255),1);
+  scene.fog.color.setRGB(r/255,g/255,b/255);
+  const bright = Math.sin(Math.PI*h/24)*0.9+0.1;
+  sun.intensity = bright * 1.3;
+  ambientLight.intensity = 0.4+bright*0.9;
+  // Warm/cool shift
+  if(h >= 6 && h <= 18) { sun.color.setHex(0xfff8e8); }
+  else { sun.color.setHex(0x203060); }
+}
+
+// Room geometry
+function buildRoomGeometry() {
+  const fm=new THREE.MeshLambertMaterial({color:0x0e0a08});
+  const wm=new THREE.MeshLambertMaterial({color:0x0d1520});
+  const ws=new THREE.MeshLambertMaterial({color:0x0a1018});
+  const cm=new THREE.MeshLambertMaterial({color:0x080c12});
+  const f=new THREE.Mesh(new THREE.PlaneGeometry(12,12),fm);
+  f.rotation.x=-Math.PI/2; f.receiveShadow=true; scene.add(f);
+  const grid=new THREE.GridHelper(12,24,0x1e2835,0x141c28);
+  grid.position.y=.002; scene.add(grid);
+  [[0,2,-6,0],[0,2,6,Math.PI],[-6,2,0,Math.PI/2],[6,2,0,-Math.PI/2]].forEach(([x,y,z,ry])=>{
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(12,4),(ry===0||ry===Math.PI)?wm:ws);
+    m.position.set(x,y,z); m.rotation.y=ry; m.receiveShadow=true; scene.add(m);
+  });
+  const ceil=new THREE.Mesh(new THREE.PlaneGeometry(12,12),cm);
+  ceil.rotation.x=Math.PI/2; ceil.position.y=4; scene.add(ceil);
+  // Baseboard
+  const sbm=new THREE.MeshLambertMaterial({color:0x1e2835});
+  [[0,-6,0],[0,6,Math.PI],[-6,0,Math.PI/2],[6,0,-Math.PI/2]].forEach(([x,z,ry])=>{
+    const m=new THREE.Mesh(new THREE.BoxGeometry(12,.1,.06),sbm);
+    m.position.set(x,.05,z); m.rotation.y=ry; scene.add(m);
+  });
+  // Window
+  const wfm=new THREE.MeshLambertMaterial({color:0x1e2835});
+  const wgm=new THREE.MeshLambertMaterial({color:0x4db8ff,transparent:true,opacity:.15});
+  const wf=new THREE.Mesh(new THREE.BoxGeometry(2.2,1.8,.08),wfm);
+  wf.position.set(0,2.2,-5.96); scene.add(wf);
+  const wg=new THREE.Mesh(new THREE.BoxGeometry(1.95,1.55,.05),wgm);
+  wg.position.set(0,2.2,-5.95); scene.add(wg);
+  [[.04,1.55,0,0],[1.95,.04,0,0]].forEach(([bw,bh,ox,oy])=>{
+    const bar=new THREE.Mesh(new THREE.BoxGeometry(bw,bh,.06),wfm);
+    bar.position.set(ox,oy+2.2,-5.94); scene.add(bar);
+  });
+  // Door
+  const df=new THREE.Mesh(new THREE.BoxGeometry(.08,2.5,1.1),wfm);
+  df.position.set(-5.96,1.25,2.5); scene.add(df);
+  // Ceiling fixture
+  const fix=new THREE.Mesh(new THREE.CylinderGeometry(.32,.27,.1,16),new THREE.MeshLambertMaterial({color:0x1e2835}));
+  fix.position.set(0,3.95,0); scene.add(fix);
+  const blb=new THREE.Mesh(new THREE.SphereGeometry(.12,8,8),new THREE.MeshLambertMaterial({color:0xffffcc,emissive:0xffffcc,emissiveIntensity:.5}));
+  blb.position.set(0,3.85,0); scene.add(blb);
+  const cl=new THREE.PointLight(0xfff8e0,.55,9);
+  cl.position.set(0,3.8,0); scene.add(cl);
+}
+buildRoomGeometry();
+
+// Device mesh
+function makeMesh(def,x,z) {
+  const g=new THREE.Group(); g.position.set(x,0,z);
+  const bm=new THREE.MeshLambertMaterial({color:def.color});
+  const dm=new THREE.MeshLambertMaterial({color:0x080c12});
+  let body;
+  if(def.shape==='flat'){
+    body=new THREE.Mesh(new THREE.BoxGeometry(1.1,.65,.07),bm); body.position.set(0,.7,0);
+    const st=new THREE.Mesh(new THREE.BoxGeometry(.07,.45,.07),dm); st.position.set(0,.22,0);
+    const ba=new THREE.Mesh(new THREE.BoxGeometry(.5,.05,.2),dm); ba.position.set(0,.025,0);
+    g.add(st,ba);
+  } else if(def.shape==='tower'){
+    body=new THREE.Mesh(new THREE.BoxGeometry(.33,.85,.62),bm); body.position.set(0,.425,0);
+    const btn=new THREE.Mesh(new THREE.CylinderGeometry(.028,.028,.02,8),new THREE.MeshLambertMaterial({color:0x4db8ff}));
+    btn.position.set(.14,.67,.32); g.add(btn);
+  } else if(def.shape==='tall'){
+    body=new THREE.Mesh(new THREE.BoxGeometry(.62,1.35,.62),bm); body.position.set(0,.675,0);
+  } else if(def.shape==='lamp'){
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,1.3,8),dm); pole.position.set(0,.65,0);
+    const shade=new THREE.Mesh(new THREE.CylinderGeometry(.34,.18,.28,12,1,true),bm); shade.position.set(0,1.28,0);
+    const base2=new THREE.Mesh(new THREE.CylinderGeometry(.15,.17,.06,12),dm); base2.position.set(0,.03,0);
+    g.add(pole,shade,base2);
+    body=new THREE.Mesh(new THREE.SphereGeometry(.09,8,8),new THREE.MeshLambertMaterial({color:0xffffaa,emissive:0xffffaa,emissiveIntensity:0}));
+    body.position.set(0,1.22,0);
+  } else if(def.shape==='sofa'){
+    body=new THREE.Mesh(new THREE.BoxGeometry(1.8,.45,0.8),bm); body.position.set(0,.22,0);
+    const back=new THREE.Mesh(new THREE.BoxGeometry(1.8,.6,.15),bm); back.position.set(0,.52,-.32); g.add(back);
+    const la=new THREE.Mesh(new THREE.BoxGeometry(.18,.35,.8),bm); la.position.set(-.81,.17,0); g.add(la);
+    const ra=new THREE.Mesh(new THREE.BoxGeometry(.18,.35,.8),bm); ra.position.set(.81,.17,0); g.add(ra);
+  } else if(def.shape==='bed'){
+    body=new THREE.Mesh(new THREE.BoxGeometry(1.6,.25,2.0),bm); body.position.set(0,.12,0);
+    const hb=new THREE.Mesh(new THREE.BoxGeometry(1.6,.65,.12),bm); hb.position.set(0,.45,-.94); g.add(hb);
+    const pillow=new THREE.Mesh(new THREE.BoxGeometry(.55,.12,.4),new THREE.MeshLambertMaterial({color:0xeeeeff}));
+    pillow.position.set(-.4,.27,-.5); g.add(pillow);
+    const pillow2=new THREE.Mesh(new THREE.BoxGeometry(.55,.12,.4),new THREE.MeshLambertMaterial({color:0xeeeeff}));
+    pillow2.position.set(.4,.27,-.5); g.add(pillow2);
+  } else if(def.shape==='table'){
+    body=new THREE.Mesh(new THREE.BoxGeometry(1.4,.07,0.8),bm); body.position.set(0,.7,0);
+    [[.6,.7,.35],[-.6,.7,.35],[.6,.7,-.35],[-.6,.7,-.35]].forEach(([lx,ly,lz])=>{
+      const leg=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,.7,8),dm); leg.position.set(lx,ly-.35,lz); g.add(leg);
+    });
+  } else if(def.shape==='plant'){
+    const pot=new THREE.Mesh(new THREE.CylinderGeometry(.18,.14,.3,10),new THREE.MeshLambertMaterial({color:0x8b4513})); pot.position.set(0,.15,0); g.add(pot);
+    const soil=new THREE.Mesh(new THREE.CylinderGeometry(.17,.17,.04,10),new THREE.MeshLambertMaterial({color:0x3d2b1a})); soil.position.set(0,.31,0); g.add(soil);
+    body=new THREE.Mesh(new THREE.SphereGeometry(.38,8,8),bm); body.position.set(0,.72,0);
+    const stem=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,.4,6),new THREE.MeshLambertMaterial({color:0x1f5c30})); stem.position.set(0,.5,0); g.add(stem);
+  } else {
+    body=new THREE.Mesh(new THREE.BoxGeometry(.46,.33,.46),bm); body.position.set(0,.165,0);
+  }
+  body.castShadow=true; body.receiveShadow=true; g.add(body);
+  g.userData={body,originalY:0};
+  const glow=new THREE.PointLight(def.color,0,2.2); glow.position.set(0,.7,0); g.add(glow);
+  g.userData.glowLight=glow;
+  // Label sprite
+  const cv=document.createElement('canvas'); cv.width=144; cv.height=52;
+  const cx=cv.getContext('2d');
+  cx.fillStyle='rgba(13,18,25,.92)'; cx.strokeStyle='#1e2835'; cx.lineWidth=1.5;
+  cx.beginPath(); cx.roundRect(2,2,140,48,10); cx.fill(); cx.stroke();
+  cx.font='20px sans-serif'; cx.textAlign='center'; cx.fillText(def.icon,24,35);
+  cx.font='12px Outfit,sans-serif'; cx.fillStyle='#dce8f5'; cx.fillText(def.name,80,33);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true}));
+  sp.scale.set(1.04,.38,1); sp.position.set(0,2.0,0); g.add(sp);
+  scene.add(g); return g;
+}
+
+function spawnDevice(defId,x,z,hours,on) {
+  const def=DEFS.find(d=>d.id===defId); if(!def) return;
+  const mesh=makeMesh(def,x,z);
+  const uid=rooms[curRoom].nextUid++;
+  mesh.userData.uid=uid;
+  const h24=Array(24).fill(false);
+  const hrs=Math.round(Math.min(hours||4,24));
+  for(let i=0;i<hrs;i++) h24[i]=true;
+  placed().push({uid,devId:defId,hours:hours||4,hours24:h24,on:on!==false,mesh,animOffset:Math.random()*Math.PI*2});
+  setGlow(placed()[placed().length-1]);
+  updateStats(); renderTimeline();
+}
+
+function setGlow(p) {
+  const g=p.mesh.userData.glowLight;
+  const def=DEFS.find(d=>d.id===p.devId);
+  g.intensity=p.on&&def.watts>0?.8:0;
+}
+
+// ═══════════════════════════════════════
+// MULTI-ROOM
+// ═══════════════════════════════════════
+function switchRoom(idx,el) {
+  placed().forEach(p=>p.mesh&&(p.mesh.visible=false));
+  curRoom=idx;
+  placed().forEach(p=>p.mesh&&(p.mesh.visible=true));
+  document.querySelectorAll('.rtab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  selUid=null;
+  document.getElementById('sel-panel').style.display='none';
+  document.getElementById('room-stat-title').textContent=rooms[curRoom].name+' — dziś';
+  updateStats(); renderTimeline();
+}
+
+function addRoom() {
+  const name=prompt('Nazwa pokoju:','Pokój '+(rooms.length+1));
+  if(!name) return;
+  rooms.push({name,placed:[],nextUid:1});
+  const tabs=document.getElementById('room-tabs');
+  const btn=tabs.querySelector('.add-room-btn');
+  const rtab=document.createElement('div');
+  rtab.className='rtab'; rtab.textContent='🚪 '+name;
+  const idx=rooms.length-1;
+  rtab.onclick=function(){switchRoom(idx,this);};
+  tabs.insertBefore(rtab,btn);
+}
+
+// ═══════════════════════════════════════
+// ENVIRONMENT
+// ═══════════════════════════════════════
+function toggleEnv(key) {
+  envState[key]=!envState[key];
+  const st=envState[key]?'otwarte':'zamknięte';
+  document.getElementById(key==='window'?'win-st':'door-st').textContent=st;
+  document.getElementById(key==='window'?'win-btn':'door-btn').classList.toggle('on',envState[key]);
+  if(key==='window') windowLight.intensity=envState.window?.45:0;
+  updateStats();
+}
+
+// ═══════════════════════════════════════
+// WEATHER
+// ═══════════════════════════════════════
+async function fetchWeather() {
+  try {
+    const r=await fetch('https://api.open-meteo.com/v1/forecast?latitude=52.23&longitude=21.01&current_weather=true&temperature_unit=celsius');
+    const d=await r.json();
+    if(!d.current_weather) throw '';
+    const temp=Math.round(d.current_weather.temperature);
+    const wcode=d.current_weather.weathercode;
+    const icons={0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',61:'🌧️',71:'🌨️',80:'🌦️',95:'⛈️'};
+    const descs={0:'Bezchmurnie',1:'Prawie bezchmurnie',2:'Częściowe zachmurzenie',3:'Zachmurzenie',45:'Mgła',61:'Deszcz',71:'Śnieg',80:'Przelotne opady',95:'Burza'};
+    const ico=icons[wcode]||'🌤️';
+    const desc=descs[wcode]||'Zmienne';
+    document.getElementById('w-icon').textContent=ico;
+    document.getElementById('w-temp').textContent=temp;
+    document.getElementById('w-desc').textContent=desc+', Warszawa';
+    let effect='';
+    if(temp>28) effect='🔴 Upał: klimatyzacja +20% mocy';
+    else if(temp>22) effect='🟡 Ciepło: klimatyzacja +8% mocy';
+    else if(temp<5) effect='🔵 Zimno: ogrzewanie aktywne';
+    else effect='🟢 Optymalna temperatura';
+    document.getElementById('w-effect').textContent=effect;
+    weatherData={temp,wcode,ico,desc};
+    updateStats();
+  } catch(e) {
+    document.getElementById('w-desc').textContent='Brak danych pogodowych';
+  }
+}
+fetchWeather(); setInterval(fetchWeather,10*60*1000);
+
+// ═══════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════
+function getKwh(p) {
+  const def=DEFS.find(d=>d.id===p.devId);
+  if(!p.on||!def.watts) return 0;
+  let mult=1;
+  if(p.devId==='ac'&&envState.window) mult*=1.15;
+  if(p.devId==='ac'&&envState.door) mult*=1.08;
+  if(weatherData) {
+    if(p.devId==='ac'&&weatherData.temp>28) mult*=1.20;
+    else if(p.devId==='ac'&&weatherData.temp>22) mult*=1.08;
+  }
+  return def.watts*p.hours/1000*mult;
+}
+
+function updateStats() {
+  const items=placed().map(p=>({...p,kwh:getKwh(p),def:DEFS.find(d=>d.id===p.devId)}));
+  const total=items.reduce((s,x)=>s+x.kwh,0);
+  const mo=total*30;
+  const co2=mo*CO2;
+  const trees=(co2/21).toFixed(1);
+
+  document.getElementById('r-kwh').textContent=total.toFixed(2);
+  document.getElementById('r-day').textContent='≈ '+(total*PRICE).toFixed(2)+' zł';
+
+  // All rooms total
+  const allTotal=rooms.reduce((s,r)=>s+r.placed.reduce((rs,p)=>rs+getKwhOf(p),0),0);
+  document.getElementById('r-total').textContent=allTotal.toFixed(2);
+  document.getElementById('r-total-cost').textContent='dom: ≈ '+(allTotal*PRICE).toFixed(2)+' zł/dzień';
+
+  document.getElementById('r-co2').textContent=co2.toFixed(1);
+  document.getElementById('r-trees').textContent=trees>0?`≈ ${trees} drzew/rok`:'';
+
+  const sorted=items.filter(x=>x.kwh>0).sort((a,b)=>b.kwh-a.kwh).slice(0,5);
+  const maxK=sorted[0]?.kwh||1;
+  const ch=n=>'#'+n.toString(16).padStart(6,'0');
+  document.getElementById('r-bars').innerHTML=sorted.map(d=>
+    `<div class="bar-row"><span style="font-size:10px;width:14px;">${d.def.icon}</span><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(d.kwh/maxK*100)}%;background:${ch(d.def.color)};"></div></div><span class="bar-nm">${d.def.name}</span></div>`
+  ).join('')||'<div style="font-size:9px;color:var(--text3);">Brak urządzeń</div>';
+
+  particleMat.opacity=Math.min(.9,total*.055);
+
+  const xp=Math.min(100,placed().length*12+(total<5&&total>0?18:0));
+  document.getElementById('xp-fill').style.width=xp+'%';
+  document.getElementById('xp-pts').textContent=xp+' XP';
+  document.getElementById('xp-lvl').textContent='Poziom '+(xp<20?1:xp<50?2:xp<80?3:4);
+  const bd=[];
+  if(placed().length>=3) bd.push('🏠 Urządzony');
+  if(placed().length>=6) bd.push('🏆 Ekspert');
+  if(total>0&&total<3) bd.push('🌱 Eko');
+  document.getElementById('badges').innerHTML=bd.map(b=>`<div class="badge">${b}</div>`).join('');
+
+  if(total>10) { document.getElementById('r-tip').textContent='💡 >10 kWh/dzień! Ograniczyć klimatyzację lub wymienić na LED.'; }
+  else if(total>5) { document.getElementById('r-tip').textContent='📊 Możesz zaoszczędzić skracając komputer o 1–2h dziennie.'; }
+  else if(total>0) { document.getElementById('r-tip').textContent='✅ Świetne zużycie! Poniżej średniej gospodarstwa.'; }
+
+  updateLB(total,mo,co2);
+  calcInvoice();
+}
+
+function getKwhOf(p) {
+  const def=DEFS.find(d=>d.id===p.devId);
+  if(!p.on||!def||!def.watts) return 0;
+  return def.watts*p.hours/1000;
+}
+
+// ═══════════════════════════════════════
+// DEVICE CONTROLS
+// ═══════════════════════════════════════
+function buildDevList() {
+  document.getElementById('dev-list').innerHTML=DEFS.map(d=>
+    `<div class="dev-btn" onclick="addRandom('${d.id}')"><span>${d.icon}</span><span>${d.name}</span><span class="dw">${d.watts?d.watts+'W':'deko'}</span></div>`
+  ).join('');
+}
+buildDevList();
+
+function addRandom(devId) {
+  const x=(Math.random()-.5)*8, z=(Math.random()-.5)*8;
+  spawnDevice(devId,x,z,4,true);
+  const uid=placed()[placed().length-1].uid;
+  selDevice(uid);
+}
+
+function loadScenario(name,el) {
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  placed().forEach(p=>scene.remove(p.mesh));
+  rooms[curRoom].placed=[]; rooms[curRoom].nextUid=1;
+  selUid=null; document.getElementById('sel-panel').style.display='none';
+  if(SCENARIOS[name]) {
+    const xs=[-2.5,-.5,2,-1.5,1.5,-3,3,.5,-2,2.5];
+    const zs=[-1,-2,-1.5,.5,1,-3,-2.5,2,-2.5,0];
+    SCENARIOS[name].forEach((s,i)=>spawnDevice(s.id,xs[i]||0,zs[i]||0,s.h,true));
+  }
+  updateStats(); renderTimeline();
+}
+
+function selDevice(uid) {
+  selUid=uid;
+  const p=placed().find(x=>x.uid===uid); if(!p) return;
+  const def=DEFS.find(d=>d.id===p.devId);
+  document.getElementById('sel-panel').style.display='';
+  document.getElementById('sel-nm').textContent=def.icon+' '+def.name+(def.watts?' · '+def.watts+'W':'');
+  document.getElementById('h-sl').value=p.hours;
+  document.getElementById('h-val').textContent=p.hours+'h';
+  const btn=document.getElementById('tog-btn');
+  btn.textContent=p.on?'Wł.':'Wył.';
+  btn.className='tog'+(p.on?' on':'');
+  const kwh=(def.watts*p.hours/1000).toFixed(3);
+  document.getElementById('sel-kwh').textContent=p.on&&def.watts?`${kwh} kWh/d · ${(kwh*PRICE).toFixed(2)} zł`:(def.watts?'Wyłączone':'Dekoracja');
+}
+
+function toggleSel() {
+  const p=placed().find(x=>x.uid===selUid); if(!p) return;
+  p.on=!p.on; setGlow(p);
+  const btn=document.getElementById('tog-btn');
+  btn.textContent=p.on?'Wł.':'Wył.';
+  btn.className='tog'+(p.on?' on':'');
+  const def=DEFS.find(d=>d.id===p.devId);
+  const kwh=(def.watts*p.hours/1000).toFixed(3);
+  document.getElementById('sel-kwh').textContent=p.on&&def.watts?`${kwh} kWh/d · ${(kwh*PRICE).toFixed(2)} zł`:(def.watts?'Wyłączone':'Dekoracja');
+  updateStats();
+}
+
+function updH(v) {
+  const p=placed().find(x=>x.uid===selUid); if(!p) return;
+  p.hours=parseFloat(v);
+  document.getElementById('h-val').textContent=parseFloat(v).toFixed(v%1===0?0:1)+'h';
+  const def=DEFS.find(d=>d.id===p.devId);
+  const kwh=(def.watts*p.hours/1000).toFixed(3);
+  document.getElementById('sel-kwh').textContent=p.on&&def.watts?`${kwh} kWh/d · ${(kwh*PRICE).toFixed(2)} zł`:(def.watts?'Wyłączone':'Dekoracja');
+  updateStats();
+}
+
+function removeSel() {
+  const p=placed().find(x=>x.uid===selUid); if(!p) return;
+  scene.remove(p.mesh);
+  rooms[curRoom].placed=rooms[curRoom].placed.filter(x=>x.uid!==selUid);
+  selUid=null; document.getElementById('sel-panel').style.display='none';
+  updateStats(); renderTimeline();
+}
+
+// Raycaster
+const rc=new THREE.Raycaster(), mv=new THREE.Vector2();
+document.getElementById('c3').addEventListener('click',e=>{
+  const r=document.getElementById('c3').getBoundingClientRect();
+  mv.x=((e.clientX-r.left)/r.width)*2-1;
+  mv.y=-((e.clientY-r.top)/r.height)*2+1;
+  rc.setFromCamera(mv,camera);
+  const meshes=placed().flatMap(p=>{const c=[];p.mesh.traverse(x=>{if(x.isMesh)c.push(x);});return c;});
+  const hits=rc.intersectObjects(meshes);
+  if(hits.length>0){
+    let obj=hits[0].object;
+    while(obj.parent&&!obj.userData.uid) obj=obj.parent;
+    if(obj.userData.uid){selDevice(obj.userData.uid);document.getElementById('hint3d').style.display='none';}
+  }
+});
+
+// ═══════════════════════════════════════
+// PARTICLES
+// ═══════════════════════════════════════
+const pGeo=new THREE.BufferGeometry();
+const pPos=new Float32Array(90*3);
+for(let i=0;i<90;i++){pPos[i*3]=(Math.random()-.5)*9;pPos[i*3+1]=Math.random()*3.8;pPos[i*3+2]=(Math.random()-.5)*9;}
+pGeo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
+const particleMat=new THREE.PointsMaterial({color:0xe3b341,size:.055,transparent:true,opacity:0});
+const particles=new THREE.Points(pGeo,particleMat); scene.add(particles);
+
+// ═══════════════════════════════════════
+// ORBIT
+// ═══════════════════════════════════════
+let isDrag=false,prevM={x:0,y:0},sph={theta:0,phi:.42};
+const c3=document.getElementById('c3');
+c3.addEventListener('mousedown',e=>{isDrag=true;prevM={x:e.clientX,y:e.clientY};});
+window.addEventListener('mouseup',()=>isDrag=false);
+window.addEventListener('mousemove',e=>{
+  if(!isDrag) return;
+  sph.theta-=(e.clientX-prevM.x)*.007;
+  sph.phi=Math.max(.1,Math.min(.95,sph.phi+(e.clientY-prevM.y)*.005));
+  prevM={x:e.clientX,y:e.clientY};
+});
+c3.addEventListener('wheel',e=>{camera.fov=Math.max(20,Math.min(75,camera.fov+e.deltaY*.03));camera.updateProjectionMatrix();});
+c3.addEventListener('touchstart',e=>{if(e.touches.length===1){isDrag=true;prevM={x:e.touches[0].clientX,y:e.touches[0].clientY};}});
+c3.addEventListener('touchend',()=>isDrag=false);
+c3.addEventListener('touchmove',e=>{
+  if(!isDrag||e.touches.length!==1) return;
+  sph.theta-=(e.touches[0].clientX-prevM.x)*.007;
+  sph.phi=Math.max(.1,Math.min(.95,sph.phi+(e.touches[0].clientY-prevM.y)*.005));
+  prevM={x:e.touches[0].clientX,y:e.touches[0].clientY};e.preventDefault();
+},{passive:false});
+
+// ═══════════════════════════════════════
+// ANIMATION
+// ═══════════════════════════════════════
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const t=clock.getElapsedTime();
+  const R=8;
+  camera.position.x=R*Math.sin(sph.theta)*Math.sin(sph.phi);
+  camera.position.y=R*Math.cos(sph.phi)+.8;
+  camera.position.z=R*Math.cos(sph.theta)*Math.sin(sph.phi);
+  camera.lookAt(0,.8,0);
+  // Animate all rooms' devices (only current visible)
+  rooms.forEach(rm=>rm.placed.forEach(p=>{
+    if(!p.mesh||!p.mesh.visible) return;
+    const f=p.on?Math.sin(t*1.3+p.animOffset)*.02:0;
+    p.mesh.position.y=f;
+    if(p.uid===selUid){p.mesh.rotation.y=Math.sin(t*.9)*.07;if(p.mesh.userData.glowLight){const def=DEFS.find(d=>d.id===p.devId);p.mesh.userData.glowLight.intensity=p.on&&def.watts>0?.9+Math.sin(t*3)*.2:0;}}
+    else{p.mesh.rotation.y=0;if(p.mesh.userData.glowLight){const def=DEFS.find(d=>d.id===p.devId);p.mesh.userData.glowLight.intensity=p.on&&def.watts>0?.55:0;}}
+    if(p.devId==='lamp'&&p.mesh.userData.body&&p.on) p.mesh.userData.body.material.emissiveIntensity=.7+Math.sin(t*2.5)*.07;
+  }));
+  // Particles
+  const pos=particles.geometry.attributes.position.array;
+  for(let i=0;i<90;i++){pos[i*3+1]+=.005;if(pos[i*3+1]>3.9){pos[i*3+1]=0;pos[i*3]=(Math.random()-.5)*8;pos[i*3+2]=(Math.random()-.5)*8;}}
+  particles.geometry.attributes.position.needsUpdate=true;
+  particles.rotation.y=t*.022;
+  if(envState.window) windowLight.intensity=.42+Math.sin(t*.5)*.04;
+  renderer.render(scene,camera);
+}
+animate();
+
+// ═══════════════════════════════════════
+// TIMELINE
+// ═══════════════════════════════════════
+let tlDrag=false,tlDev=null,tlVal=false;
+function renderTimeline(){
+  const lbl=document.getElementById('tl-hlabels');
+  lbl.innerHTML=Array.from({length:24},(_,i)=>`<div class="tl-hl">${i}</div>`).join('');
+  const rows=document.getElementById('tl-rows');
+  if(placed().length===0){rows.innerHTML='<div style="padding:18px;color:var(--text3);font-size:11px;">Dodaj urządzenia w widoku 3D aby zobaczyć harmonogram</div>';return;}
+  rows.innerHTML=placed().map(p=>{
+    const def=DEFS.find(d=>d.id===p.devId);
+    if(!def.watts) return '';
+    const ch='#'+def.color.toString(16).padStart(6,'0');
+    return `<div class="tl-dev-row"><div class="tl-dev-lbl"><span>${def.icon}</span><span>${def.name}</span></div>
+    <div class="tl-hrs">${Array.from({length:24},(_,h)=>`<div class="tl-cell${p.hours24[h]?' active':''}" style="${p.hours24[h]?`background:${ch}22;border-color:${ch};`:''}"
+      data-uid="${p.uid}" data-h="${h}" onmousedown="tlMD(${p.uid},${h},event)" onmouseenter="tlME(${p.uid},${h})"></div>`).join('')}
+    </div></div>`;
+  }).join('');
+  tlStats();
+}
+function tlMD(uid,h,e){tlDrag=true;tlDev=uid;const p=placed().find(x=>x.uid===uid);if(!p)return;tlVal=!p.hours24[h];p.hours24[h]=tlVal;p.hours=p.hours24.filter(Boolean).length;renderTimeline();e.preventDefault();}
+function tlME(uid,h){if(!tlDrag||tlDev!==uid)return;const p=placed().find(x=>x.uid===uid);if(!p)return;p.hours24[h]=tlVal;p.hours=p.hours24.filter(Boolean).length;const def=DEFS.find(d=>d.id===p.devId);const ch='#'+def.color.toString(16).padStart(6,'0');const cell=document.querySelector(`[data-uid="${uid}"][data-h="${h}"]`);if(cell){cell.classList.toggle('active',tlVal);cell.style.background=tlVal?ch+'22':'';cell.style.borderColor=tlVal?ch:'';}tlStats();updateStats();}
+window.addEventListener('mouseup',()=>tlDrag=false);
+function tlStats(){
+  const items=placed().map(p=>({...p,kwh:getKwh(p)}));
+  const tot=items.reduce((s,x)=>s+x.kwh,0);
+  document.getElementById('tl-kwh').textContent=tot.toFixed(2);
+  document.getElementById('tl-cost').textContent=(tot*PRICE).toFixed(2)+' zł';
+  const hLoad=Array(24).fill(0);
+  placed().forEach(p=>{if(!p.on)return;const def=DEFS.find(d=>d.id===p.devId);p.hours24.forEach((a,h)=>{if(a)hLoad[h]+=def.watts;});});
+  const maxH=hLoad.indexOf(Math.max(...hLoad));
+  document.getElementById('tl-peak').textContent=Math.max(...hLoad)>0?`${maxH}:00–${maxH+1}:00`:'–';
+}
+
+// ═══════════════════════════════════════
+// COMPARE
+// ═══════════════════════════════════════
+function getSc(name){return name==='current'?placed().map(p=>({id:p.devId,h:p.hours,on:p.on})):(SCENARIOS[name]||[]).map(s=>({id:s.id,h:s.h,on:true}));}
+function calcSc(data){return data.map(s=>{const def=DEFS.find(d=>d.id===s.id);if(!def)return null;return{...s,def,kwh:s.on!==false?def.watts*s.h/1000:0};}).filter(Boolean);}
+function renderCompare(){renderCmpCol('a',document.getElementById('cmp-a').value);renderCmpCol('b',document.getElementById('cmp-b').value);drawCmpChart();}
+function renderCmpCol(side,name){
+  const data=calcSc(getSc(name));
+  const tot=data.reduce((s,x)=>s+x.kwh,0),mo=tot*30,co2=mo*CO2;
+  document.getElementById(`cmp-${side}-stats`).innerHTML=`
+    <div class="cmp-st"><span class="cmp-sl">kWh/dzień</span><span class="cmp-sv">${tot.toFixed(2)}</span></div>
+    <div class="cmp-st"><span class="cmp-sl">zł/miesiąc</span><span class="cmp-sv">${(mo*PRICE).toFixed(0)} zł</span></div>
+    <div class="cmp-st"><span class="cmp-sl">CO₂/miesiąc</span><span class="cmp-sv">${co2.toFixed(1)} kg</span></div>`;
+  document.getElementById(`cmp-${side}-devs`).innerHTML=`<div class="sb-lbl" style="margin-bottom:5px;">Urządzenia</div>`+data.map(d=>`<div class="cmp-dr"><span>${d.def.icon}</span><span>${d.def.name}</span><span style="color:var(--text3);font-size:9px;">${d.h}h</span><span class="cmp-dw">${d.kwh.toFixed(2)}</span></div>`).join('');
+}
+function drawCmpChart(){
+  const dA=calcSc(getSc(document.getElementById('cmp-a').value));
+  const dB=calcSc(getSc(document.getElementById('cmp-b').value));
+  const cv=document.getElementById('cmp-chart');
+  const ctx=cv.getContext('2d'); cv.width=cv.offsetWidth*2; cv.height=140;
+  ctx.scale(2,1);
+  const W=cv.offsetWidth,H=70;
+  ctx.clearRect(0,0,W,H);
+  const ids=[...new Set([...dA.map(x=>x.id),...dB.map(x=>x.id)])];
+  const bW=Math.min(22,(W-40)/(ids.length*2+ids.length));
+  const maxK=Math.max(...dA.map(x=>x.kwh),...dB.map(x=>x.kwh),.1);
+  const gap=bW*.4; let x=20;
+  ids.forEach(id=>{
+    const def=DEFS.find(d=>d.id===id);
+    const kA=dA.find(x=>x.id===id)?.kwh||0,kB=dB.find(x=>x.id===id)?.kwh||0;
+    const hA=(kA/maxK)*(H-18),hB=(kB/maxK)*(H-18);
+    const col='#'+def.color.toString(16).padStart(6,'0');
+    ctx.fillStyle=col+'cc'; ctx.fillRect(x,H-hA-4,bW,hA);
+    ctx.fillStyle=col+'44'; ctx.fillRect(x+bW+gap,H-hB-4,bW,hB);
+    ctx.fillStyle='#4a6580'; ctx.font='9px Outfit,sans-serif'; ctx.textAlign='center';
+    ctx.fillText(def.icon,x+bW/2,H+2);
+    x+=bW*2+gap*2+10;
+  });
+  ctx.fillStyle='#4db8ff'; ctx.fillRect(W-75,4,9,7);
+  ctx.fillStyle='#4db8ff44'; ctx.fillRect(W-55,4,9,7);
+  ctx.fillStyle='#7a9ab8'; ctx.font='8px Outfit,sans-serif'; ctx.textAlign='left';
+  ctx.fillText('A',W-63,11); ctx.fillText('B',W-43,11);
+}
+
+// ═══════════════════════════════════════
+// WHAT-IF
+// ═══════════════════════════════════════
+const WI_CARDS=[
+  {ico:'💡',tit:'Zamiana na LED',sub:'Żarówki → LED (-85% mocy)',devId:'lamp',from:60,to:9,unit:'W'},
+  {ico:'🖥️',tit:'Laptop zamiast PC',sub:'PC 200W → Laptop 45W',devId:'pc',from:200,to:45,unit:'W'},
+  {ico:'❄️',tit:'Temp. klimy +2°C',sub:'20°C → 22°C (-15% zużycia)',devId:'ac',from:1500,to:1275,unit:'W'},
+  {ico:'📺',tit:'Tryb uśpienia TV',sub:'Standby 5W zamiast pełnej mocy',devId:'tv',from:120,to:5,unit:'W'},
+  {ico:'🌀',tit:'Pralka w nocy',sub:'Taryfa nocna (0.52 zł/kWh)',devId:'wash',from:.75,to:.52,unit:'price'},
+  {ico:'☕',tit:'Termos zamiast czajnika',sub:'4× → 1× zagotowanie',devId:'kettle',from:4,to:1,unit:'times'},
+];
+function renderWhatIf(){
+  document.getElementById('wi-grid').innerHTML=WI_CARDS.map((c,ci)=>{
+    const def=DEFS.find(d=>d.id===c.devId);
+    const p=placed().find(x=>x.devId===c.devId);
+    const hours=p?p.hours:4;
+    let sDay=0,sMo=0;
+    if(c.unit==='W'){sDay=(c.from-c.to)/1000*hours;sMo=sDay*30*PRICE;}
+    else if(c.unit==='price'){const kwh=def.watts*hours/1000*30;sMo=kwh*(c.from-c.to);sDay=sMo/30;}
+    else{sDay=def.watts*(c.from-c.to)/1000;sMo=sDay*30*PRICE;}
+    return `<div class="wi-card"><div class="wc-top"><span class="wc-ico">${c.ico}</span><div><div class="wc-tit">${c.tit}</div><div class="wc-sub">${c.sub}</div></div></div>
+    <div class="wc-sl"><label>Czas użycia</label><input type="range" min=".5" max="24" step=".5" value="${hours}" oninput="wiUpd(${ci},this.value)"><span class="wc-slv" id="wi-v-${ci}">${hours}h</span></div>
+    <div class="wc-savs">
+      <div class="wc-si"><span class="wc-sv g" id="wi-d-${ci}">${sDay.toFixed(2)}</span><span class="wc-slbl">kWh/d</span></div>
+      <div class="wc-si"><span class="wc-sv g" id="wi-m-${ci}">${sMo.toFixed(0)} zł</span><span class="wc-slbl">zł/miesiąc</span></div>
+      <div class="wc-si"><span class="wc-sv p" id="wi-c-${ci}">${(sDay*30*CO2).toFixed(1)}</span><span class="wc-slbl">kg CO₂/m.</span></div>
+    </div></div>`;
+  }).join('');
+}
+function wiUpd(ci,v){
+  const c=WI_CARDS[ci],def=DEFS.find(d=>d.id===c.devId),h=parseFloat(v);
+  document.getElementById(`wi-v-${ci}`).textContent=h+'h';
+  let sDay=0,sMo=0;
+  if(c.unit==='W'){sDay=(c.from-c.to)/1000*h;sMo=sDay*30*PRICE;}
+  else if(c.unit==='price'){const kwh=def.watts*h/1000*30;sMo=kwh*(c.from-c.to);sDay=sMo/30;}
+  else{sDay=def.watts*(c.from-c.to)/1000;sMo=sDay*30*PRICE;}
+  document.getElementById(`wi-d-${ci}`).textContent=sDay.toFixed(2);
+  document.getElementById(`wi-m-${ci}`).textContent=sMo.toFixed(0)+' zł';
+  document.getElementById(`wi-c-${ci}`).textContent=(sDay*30*CO2).toFixed(1);
+}
+
+// ═══════════════════════════════════════
+// INVOICE CALCULATOR
+// ═══════════════════════════════════════
+function calcInvoice(){
+  const amount=parseFloat(document.getElementById('inv-amount')?.value)||0;
+  const kwhBill=parseFloat(document.getElementById('inv-kwh')?.value)||0;
+  const days=parseFloat(document.getElementById('inv-days')?.value)||30;
+  const tariff=parseFloat(document.getElementById('inv-tariff')?.value)||0.75;
+  const items=placed().map(p=>({...p,kwh:getKwh(p)}));
+  const simDay=items.reduce((s,x)=>s+x.kwh,0);
+  const simPeriod=simDay*days;
+  const simCost=simPeriod*tariff;
+  const diff=amount-simCost;
+  const pctKwh=kwhBill>0?((simPeriod/kwhBill-1)*100).toFixed(0):null;
+  if(!document.getElementById('inv-result')) return;
+  document.getElementById('inv-result').innerHTML=`
+    <div class="inv-res-row"><span class="inv-res-lbl">Twój rachunek</span><span class="inv-res-val">${amount.toFixed(2)} zł</span></div>
+    <div class="inv-res-row"><span class="inv-res-lbl">Symulacja (${days} dni)</span><span class="inv-res-val">${simCost.toFixed(2)} zł</span></div>
+    <div class="inv-res-row"><span class="inv-res-lbl">Symulowane zużycie</span><span class="inv-res-val">${simPeriod.toFixed(1)} kWh</span></div>
+    ${kwhBill?`<div class="inv-res-row"><span class="inv-res-lbl">Rzeczywiste zużycie</span><span class="inv-res-val">${kwhBill} kWh</span></div>`:''}
+    <hr class="inv-res-sep">
+    <div class="inv-res-row"><span class="inv-res-lbl">Różnica kosztu</span><span class="inv-res-val ${diff>0?'red':'green'}">${diff>0?'+':''}${diff.toFixed(2)} zł</span></div>
+    ${pctKwh?`<div class="inv-res-row"><span class="inv-res-lbl">Różnica zużycia</span><span class="inv-res-val ${pctKwh>0?'red':'green'}">${pctKwh>0?'+':''}${pctKwh}%</span></div>`:''}
+    <div style="font-size:10px;color:var(--text3);margin-top:6px;">${diff>5?'📊 Symulacja niższa od rachunku — masz inne urządzenia lub dłużej działają.':diff<-5?'✅ Symulacja wyższa — Twój faktyczny rachunek jest niższy niż model.':'✅ Symulacja zbliżona do rachunku.'}</div>
+  `;
+}
+
+// ═══════════════════════════════════════
+// EXPORT PDF
+// ═══════════════════════════════════════
+function exportPDF(){
+  const items=placed().map(p=>({...p,kwh:getKwh(p),def:DEFS.find(d=>d.id===p.devId)}));
+  const tot=items.reduce((s,x)=>s+x.kwh,0);
+  const mo=tot*30,co2=mo*CO2;
+  document.getElementById('pr-date').textContent='Data raportu: '+new Date().toLocaleDateString('pl-PL')+' | Pokój: '+rooms[curRoom].name;
+  document.getElementById('pr-grid').innerHTML=`
+    <div class="pr-card"><h3>Zużycie dzienne</h3><div class="v">${tot.toFixed(2)} kWh</div></div>
+    <div class="pr-card"><h3>Koszt miesięczny</h3><div class="v">${(mo*PRICE).toFixed(0)} zł</div></div>
+    <div class="pr-card"><h3>CO₂ miesięcznie</h3><div class="v">${co2.toFixed(1)} kg</div></div>`;
+  document.getElementById('pr-devs').innerHTML=`<tr><th>Urządzenie</th><th>Moc</th><th>Czas/dzień</th><th>kWh/dzień</th><th>zł/miesiąc</th></tr>`+
+    items.map(d=>`<tr><td>${d.def.icon} ${d.def.name}</td><td>${d.def.watts}W</td><td>${d.hours}h</td><td>${d.kwh.toFixed(3)}</td><td>${(d.kwh*30*PRICE).toFixed(2)}</td></tr>`).join('');
+  document.getElementById('pr-recs').innerHTML=`<strong>Rekomendacje:</strong><br>${tot>10?'• Zmniejsz czas użycia klimatyzacji lub komputera.<br>':''}${tot>5?'• Rozważ wymianę żarówek na LED.<br>':''}${tot<=5?'• Świetne zużycie! Jesteś poniżej średniej.':''}`;
+  window.print();
+}
+
+// ═══════════════════════════════════════
+// LEADERBOARD
+// ═══════════════════════════════════════
+function updateLB(myKwh,myMo,myCo2){
+  const myRow={name:'TY 👤',sc:'Aktualny',kwh:myKwh,isYou:true};
+  const all=[...FAKE_LB,myRow].sort((a,b)=>a.kwh-b.kwh);
+  const maxK=Math.max(...all.map(x=>x.kwh));
+  document.getElementById('lb-body').innerHTML=all.map((u,i)=>{
+    const r=i+1,mo=u.kwh*30*PRICE,co2=u.kwh*30*CO2;
+    const sc=Math.round(100-u.kwh/maxK*100+10);
+    const bw=Math.round((1-u.kwh/maxK)*100);
+    const bc=sc>70?'var(--green)':sc>40?'var(--yellow)':'var(--red)';
+    return `<tr${u.isYou?' class="you"':''}>
+      <td><span class="rnk ${r===1?'r1':r===2?'r2':r===3?'r3':'rn'}">${r}</span></td>
+      <td>${u.isYou?'<strong>'+u.name+'</strong>':u.name}</td>
+      <td style="font-size:9px;color:var(--text3);">${u.sc}</td>
+      <td style="font-family:var(--mono);">${u.kwh.toFixed(1)}</td>
+      <td style="font-family:var(--mono);">${mo.toFixed(0)} zł</td>
+      <td style="font-family:var(--mono);">${co2.toFixed(1)}</td>
+      <td><div style="font-family:var(--mono);font-size:11px;font-weight:700;color:${bc};">${sc}</div><div class="sc-bar" style="width:${bw}%;background:${bc};"></div></td>
+    </tr>`;
+  }).join('');
+}
+updateLB(0,0,0);
+
+// ═══════════════════════════════════════
+// HISTORY
+// ═══════════════════════════════════════
+function saveSession(){
+  const items=placed().map(p=>({...p,kwh:getKwh(p),def:DEFS.find(d=>d.id===p.devId)}));
+  const tot=items.reduce((s,x)=>s+x.kwh,0);
+  const session={
+    id:Date.now(),
+    date:new Date().toLocaleString('pl-PL'),
+    room:rooms[curRoom].name,
+    devices:placed().map(p=>({devId:p.devId,hours:p.hours,on:p.on})),
+    kwh:tot,cost:tot*30*PRICE,co2:tot*30*CO2,
+  };
+  sessions.unshift(session);
+  if(sessions.length>20) sessions=sessions.slice(0,20);
+  localStorage.setItem('er_sessions',JSON.stringify(sessions));
+  renderHistory();
+  alert('✅ Sesja zapisana!');
+}
+
+function renderHistory(){
+  const el=document.getElementById('hist-cards');
+  if(sessions.length===0){el.innerHTML='<div class="hist-empty">Brak zapisanych sesji. Kliknij "Zapisz sesję" aby zachować aktualny stan pokoju.</div>';return;}
+  el.innerHTML=sessions.map(s=>`
+    <div class="hist-card" onclick="loadSession(${s.id})">
+      <div class="hc-top"><div class="hc-title">🚪 ${s.room}</div><div class="hc-date">${s.date}</div></div>
+      <div class="hc-stats">
+        <div class="hc-st"><span class="hc-sv">${s.kwh.toFixed(2)}</span><span class="hc-sl">kWh/dzień</span></div>
+        <div class="hc-st"><span class="hc-sv">${s.cost.toFixed(0)} zł</span><span class="hc-sl">zł/miesiąc</span></div>
+        <div class="hc-st"><span class="hc-sv">${s.co2.toFixed(1)}</span><span class="hc-sl">kg CO₂/m.</span></div>
+      </div>
+      <div class="hc-devs">${s.devices.map(d=>{const def=DEFS.find(x=>x.id===d.devId);return def?def.icon:''}).join(' ')}</div>
+    </div>`).join('');
+}
+
+function loadSession(id){
+  const s=sessions.find(x=>x.id===id); if(!s) return;
+  placed().forEach(p=>scene.remove(p.mesh));
+  rooms[curRoom].placed=[]; rooms[curRoom].nextUid=1;
+  selUid=null; document.getElementById('sel-panel').style.display='none';
+  const xs=[-2.5,-.5,2,-1.5,1.5,-3,3,.5,-2,2.5];
+  const zs=[-1,-2,-1.5,.5,1,-3,-2.5,2,-2.5,0];
+  s.devices.forEach((d,i)=>spawnDevice(d.devId,xs[i]||0,zs[i]||0,d.hours,d.on));
+  updateStats(); renderTimeline();
+  switchTab('room',document.querySelector('.tab'));
+}
+
+renderHistory();
+
+// ═══════════════════════════════════════
+// CERTIFICATE
+// ═══════════════════════════════════════
+function checkCert(){
+  const items=placed().map(p=>({...p,kwh:getKwh(p)}));
+  const tot=items.reduce((s,x)=>s+x.kwh,0);
+  const mo=tot*30,co2=mo*CO2;
+  const ov=document.getElementById('cert-overlay');
+  document.getElementById('cert-stats').innerHTML=`
+    <div class="cert-st"><span class="cert-sv">${tot.toFixed(2)}</span><span class="cert-sl">kWh/dzień</span></div>
+    <div class="cert-st"><span class="cert-sv">${(mo*PRICE).toFixed(0)}</span><span class="cert-sl">zł/mies.</span></div>
+    <div class="cert-st"><span class="cert-sv">${co2.toFixed(1)}</span><span class="cert-sl">kg CO₂/m.</span></div>`;
+  let grade,sub;
+  if(tot<2){grade='🌟 A+';sub='Wyjątkowy dom energetyczny!';}
+  else if(tot<4){grade='⭐ A';sub='Świetne zużycie! Poniżej średniej.';}
+  else if(tot<6){grade='✅ B';sub='Dobre zużycie, możesz poprawić.';}
+  else if(tot<10){grade='🟡 C';sub='Średnie zużycie. Sprawdź rekomendacje.';}
+  else{grade='🔴 D';sub='Wysokie zużycie. Wiele do poprawy.';}
+  document.getElementById('cert-grade').textContent=grade;
+  document.getElementById('cert-sub').textContent=sub;
+  ov.classList.add('show');
+  if(voiceEnabled) speak(`Twój certyfikat energetyczny: ocena ${grade}. ${sub}`);
+}
+
+function shareCert(){
+  const items=placed().map(p=>({...p,kwh:getKwh(p)}));
+  const tot=items.reduce((s,x)=>s+x.kwh,0);
+  const txt=`⚡ Mój EnergyRoom: ${tot.toFixed(2)} kWh/dzień · ${(tot*30*PRICE).toFixed(0)} zł/miesiąc #EnergyRoom3D`;
+  if(navigator.clipboard) navigator.clipboard.writeText(txt).then(()=>alert('📋 Skopiowano do schowka!'));
+}
+
+// ═══════════════════════════════════════
+// VOICE
+// ═══════════════════════════════════════
+function toggleVoice(){
+  voiceEnabled=!voiceEnabled;
+  document.getElementById('voice-lbl').textContent=voiceEnabled?'Wyłącz':'Włącz';
+  document.getElementById('voice-btn').classList.toggle('speaking',voiceEnabled);
+  if(voiceEnabled) speak('Asystent głosowy włączony. Jestem gotowy do pomocy.');
+}
+
+function speak(text){
+  if(!voiceEnabled||!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt=new SpeechSynthesisUtterance(text);
+  utt.lang='pl-PL'; utt.rate=1.0; utt.pitch=1.0;
+  const voices=window.speechSynthesis.getVoices().filter(v=>v.lang.startsWith('pl'));
+  if(voices.length>0) utt.voice=voices[0];
+  window.speechSynthesis.speak(utt);
+}
+
+// ═══════════════════════════════════════
+// AI CHAT
+// ═══════════════════════════════════════
+function getRoomCtx(){
+  const items=placed().map(p=>({...p,kwh:getKwh(p)}));
+  const tot=items.reduce((s,x)=>s+x.kwh,0);
+  const allTotal=rooms.reduce((s,r)=>s+r.placed.reduce((rs,p)=>rs+getKwhOf(p),0),0);
+  return `Stan pokoju "${rooms[curRoom].name}":
+Urządzenia: ${placed().length>0?placed().map(p=>{const def=DEFS.find(d=>d.id===p.devId);return`${def.name}(${def.watts}W,${p.hours}h,${p.on?'wł':'wył'})`;}).join('; '):'brak'}
+Zużycie pokoju: ${tot.toFixed(2)} kWh/dzień (≈${(tot*PRICE).toFixed(2)} zł/dzień)
+Cały dom: ${allTotal.toFixed(2)} kWh/dzień (${rooms.length} pokoje)
+CO₂: ${(tot*30*CO2).toFixed(1)} kg/miesiąc
+Środowisko: okno ${envState.window?'otwarte':'zamknięte'}, drzwi ${envState.door?'otwarte':'zamknięte'}
+Pogoda: ${weatherData?weatherData.temp+'°C, '+weatherData.desc:'nieznana'}
+Pora dnia: ${dayHour}:00`;
+}
+
+async function sendChat(){
+  const inp=document.getElementById('chat-inp');
+  const text=inp.value.trim(); if(!text) return;
+  inp.value='';
+  addMsg('user',text);
+  chatHistory.push({role:'user',content:text});
+  const btn=document.getElementById('chat-snd'); btn.disabled=true;
+  const tid=addTyping();
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        system:`Jesteś asystentem energetycznym w aplikacji EnergyRoom 3D. Odpowiadaj po polsku, krótko (max 3-4 zdania), konkretnie z liczbami. Bądź przyjazny i motywujący.\n\n${getRoomCtx()}`,
+        messages:chatHistory.slice(-12)
+      })
+    });
+    const data=await resp.json();
+    const reply=data.content?.map(c=>c.text||'').join('')||'Przepraszam, wystąpił błąd.';
+    removeTyping(tid);
+    addMsg('ai',reply);
+    chatHistory.push({role:'assistant',content:reply});
+    if(voiceEnabled) speak(reply);
+  }catch(e){
+    removeTyping(tid);
+    addMsg('ai','⚠️ Nie mogę połączyć z AI. Sprawdź połączenie.');
+  }
+  btn.disabled=false;
+}
+
+function addMsg(role,text){
+  const msgs=document.getElementById('chat-msgs');
+  const now=new Date().toLocaleTimeString('pl',{hour:'2-digit',minute:'2-digit'});
+  const d=document.createElement('div'); d.className='msg '+role;
+  d.innerHTML=`<div class="msg-b">${text}</div><div class="msg-t">${now}</div>`;
+  msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight;
+}
+
+let tCount=0;
+function addTyping(){
+  const id=++tCount,msgs=document.getElementById('chat-msgs');
+  const d=document.createElement('div'); d.className='msg ai'; d.id='t-'+id;
+  d.innerHTML=`<div class="msg-b"><span class="tdot"></span><span class="tdot"></span><span class="tdot"></span></div>`;
+  msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight; return id;
+}
+function removeTyping(id){document.getElementById('t-'+id)?.remove();}
+function sendQ(el){document.getElementById('chat-inp').value=el.textContent;sendChat();}
+
+// ═══════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════
+function switchTab(name,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  if(name==='cmp') renderCompare();
+  if(name==='wi') renderWhatIf();
+  if(name==='tl') renderTimeline();
+  if(name==='hist') renderHistory();
+}
+
+// Init
+renderWhatIf();
+calcInvoice();
+setDayTime(12);
+</script>
+</body>
+</html>

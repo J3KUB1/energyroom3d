@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pl" class="h-full dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Energy Simulator Enterprise v1.2 - Built-in & Custom Models</title>
+    <meta name="description" content="Zaawansowany symulator energii 3D z wbudowanymi modelami oraz obsługą customowych plików .gltf/.glb.">
+    <meta name="theme-color" content="#080d1a">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Style własne -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Three.js + Libraries CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col md:flex-row overflow-hidden font-sans antialiased">
+
+    <!-- SEKCJA 3D (VIEWPORT) -->
+    <main class="relative flex-1 h-2/3 md:h-full bg-slate-900 border-b md:border-b-0 md:border-r border-slate-800/80">
+        
+        <!-- Toast Powiadomień -->
+        <div id="loader-toast" class="absolute top-4 right-4 z-20 bg-indigo-950/90 border border-indigo-500/40 text-indigo-200 text-xs px-4 py-2.5 rounded-xl backdrop-blur-md shadow-2xl flex items-center gap-3 transition-all duration-300 opacity-0 pointer-events-none translate-y-[-10px]">
+            <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-indigo-400"></i>
+            <span id="loader-text">Wczytywanie obiektu 3D...</span>
+        </div>
+
+        <!-- Instrukcja Obsługi -->
+        <div class="absolute top-4 left-4 z-10 bg-slate-950/80 backdrop-blur-md border border-slate-800/80 p-4 rounded-2xl shadow-2xl pointer-events-none text-xs text-slate-300 max-w-xs hidden sm:block">
+            <div class="font-bold text-slate-100 mb-1.5 flex items-center gap-2">
+                <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i> Read-Only Models Engine
+            </div>
+            <p class="text-[11px] text-slate-400 leading-relaxed mb-2">
+                Wybierz gotowe modele lub załaduj własny plik .gltf / .glb. Geometria urządzeń jest zablokowana na scenie.
+            </p>
+            <div class="space-y-1 text-[10px] text-slate-400 font-mono">
+                <div>• LPM: Obrót widoku</div>
+                <div>• PPM: Przesuwanie kamery</div>
+                <div>• Scroll: Przybliżenie (Zoom)</div>
+            </div>
+        </div>
+
+        <!-- Kontener Canvas -->
+        <div id="canvas-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+    </main>
+
+    <!-- PANEL STEROWANIA (SIDEBAR) -->
+    <aside class="w-full md:w-[460px] h-1/3 md:h-full bg-slate-950 flex flex-col justify-between border-t md:border-t-0 border-slate-800/80 z-20">
+        
+        <!-- Header -->
+        <header class="p-5 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/40 backdrop-blur">
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                    <i data-lucide="box" class="w-5 h-5 text-indigo-400"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base text-slate-100 tracking-tight leading-none">Asset Simulator</h1>
+                    <span class="text-[10px] text-slate-400">Models & Energy Engine</span>
+                </div>
+            </div>
+            <span class="text-[10px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded-full font-semibold">v1.2 Enterprise</span>
+        </header>
+
+        <!-- Treść Panelu -->
+        <div class="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
+
+            <!-- KARTA 1: Parametry Taryfy -->
+            <section class="glass-card p-4 rounded-2xl">
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <i data-lucide="coins" class="w-4 h-4 text-emerald-400"></i> Stawka Energii
+                </label>
+                <div class="flex items-center gap-3">
+                    <input type="number" id="energy-rate" step="0.01" value="1.00" class="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3.5 py-2 text-white font-mono font-medium focus:outline-none focus:border-indigo-500 transition">
+                    <span class="text-xs font-semibold text-slate-400 whitespace-nowrap">PLN / kWh</span>
+                </div>
+            </section>
+
+            <!-- KARTA 2: Dodawanie Wbudowanych Modelu 3D -->
+            <section class="glass-card p-4 rounded-2xl">
+                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-4 h-4 text-indigo-400"></i> Dodaj Wbudowany Model 3D
+                </h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="app.addPresetDevice('server')" class="preset-btn">
+                        <i data-lucide="server" class="w-4 h-4 text-indigo-400"></i> Serwer Rack (600W)
+                    </button>
+                    <button onclick="app.addPresetDevice('workstation')" class="preset-btn">
+                        <i data-lucide="monitor" class="w-4 h-4 text-cyan-400"></i> Stacja AI (350W)
+                    </button>
+                    <button onclick="app.addPresetDevice('heatpump')" class="preset-btn">
+                        <i data-lucide="fan" class="w-4 h-4 text-emerald-400"></i> Pompa Ciepła (2000W)
+                    </button>
+                    <button onclick="app.addPresetDevice('lighting')" class="preset-btn">
+                        <i data-lucide="lightbulb" class="w-4 h-4 text-amber-400"></i> Panel LED (80W)
+                    </button>
+                </div>
+            </section>
+
+            <!-- KARTA 3: Customowe Modele GLTF/GLB -->
+            <section class="glass-card p-4 rounded-2xl">
+                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i data-lucide="file-up" class="w-4 h-4 text-indigo-400"></i> Importuj Własny Plik (.gltf / .glb)
+                </h2>
+                
+                <div class="space-y-3">
+                    <input type="file" id="file-input" accept=".gltf,.glb" class="hidden" onchange="app.handleFileSelect(event)">
+                    <button onclick="document.getElementById('file-input').click()" class="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl font-semibold text-xs text-slate-200 transition flex items-center justify-center gap-2">
+                        <i data-lucide="folder-open" class="w-4 h-4 text-indigo-400"></i> Wybierz plik z komputera
+                    </button>
+
+                    <!-- Formularz Po Wyborze Pliku -->
+                    <div id="file-details" class="hidden space-y-3 pt-3 border-t border-slate-800">
+                        <div>
+                            <label class="block text-[10px] text-slate-400 mb-1">Nazwa urządzenia:</label>
+                            <input type="text" id="custom-name" placeholder="np. Kserokopiarka" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[10px] text-slate-400 mb-1">Moc (W):</label>
+                                <input type="number" id="custom-power" value="250" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] text-slate-400 mb-1">Czas (h/dobę):</label>
+                                <input type="number" id="custom-hours" value="8" max="24" min="0" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+                            </div>
+                        </div>
+                        <button onclick="app.confirmAddCustomModel()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white rounded-xl font-semibold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20">
+                            <i data-lucide="plus-circle" class="w-4 h-4"></i> Załaduj Custom Model
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- KARTA 4: Aktywne Obiekty na Scenie -->
+            <section class="glass-card p-4 rounded-2xl">
+                <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i data-lucide="layers" class="w-4 h-4 text-indigo-400"></i> Obiekty na Scenie
+                </h2>
+                <div id="devices-list" class="space-y-3">
+                    <p class="text-xs text-slate-500 text-center py-6">Brak aktywnych obiektów na scenie.</p>
+                </div>
+            </section>
+
+        </div>
+
+        <!-- PODSUMOWANIE FINANSOWE -->
+        <footer class="p-5 bg-slate-900/90 backdrop-blur border-t border-slate-800 shadow-2xl">
+            <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <i data-lucide="calculator" class="w-4 h-4 text-emerald-400"></i> Bilans Zużycia
+            </h2>
+            <div class="grid grid-cols-2 gap-2.5">
+                <div class="stat-card">
+                    <span class="stat-label">Zużycie dobowe</span>
+                    <span id="total-daily-kwh" class="stat-value text-cyan-400">0.00 kWh</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Koszt dobowy</span>
+                    <span id="total-daily-cost" class="stat-value text-emerald-400">0.00 PLN</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Prognoza Msc (30d)</span>
+                    <span id="total-monthly-cost" class="stat-value-sub">0.00 PLN</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Prognoza Rok (365d)</span>
+                    <span id="total-yearly-cost" class="stat-value-sub">0.00 PLN</span>
+                </div>
+            </div>
+        </footer>
+    </aside>
+
+    <script src="script.js"></script>
+</body>
+</html>

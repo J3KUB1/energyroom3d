@@ -1,0 +1,571 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans, sans-serif); background: transparent; color: var(--color-text-primary); overflow: hidden; }
+#app { display: flex; flex-direction: column; height: 620px; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; border-bottom: 0.5px solid var(--color-border-tertiary);
+  background: var(--color-background-primary); z-index: 10; flex-shrink: 0;
+}
+.topbar h1 { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.pills { display: flex; gap: 5px; }
+.pill {
+  font-size: 10px; padding: 3px 9px; border-radius: 20px; cursor: pointer;
+  border: 0.5px solid var(--color-border-secondary); background: var(--color-background-secondary);
+  color: var(--color-text-secondary); transition: all 0.15s;
+}
+.pill.active { background: #185FA5; color: #E6F1FB; border-color: #185FA5; }
+.body { display: flex; flex: 1; overflow: hidden; }
+#canvas3d { flex: 1; display: block; cursor: grab; }
+#canvas3d:active { cursor: grabbing; }
+
+.right-panel {
+  width: 210px; display: flex; flex-direction: column;
+  border-left: 0.5px solid var(--color-border-tertiary); background: var(--color-background-primary);
+  overflow-y: auto; flex-shrink: 0;
+}
+.panel-section { padding: 10px 12px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.panel-label { font-size: 10px; font-weight: 500; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+.stat-big { font-size: 22px; font-weight: 500; }
+.stat-unit { font-size: 11px; color: var(--color-text-secondary); }
+.stat-sub { font-size: 11px; color: var(--color-text-secondary); margin-top: 1px; }
+.bar-row { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+.bar-icon { font-size: 11px; width: 16px; }
+.bar-bg { flex: 1; height: 5px; background: var(--color-background-secondary); border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+.bar-nm { font-size: 10px; color: var(--color-text-secondary); width: 52px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.device-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.dev-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 4px; border-radius: var(--border-radius-md); cursor: pointer;
+  border: 0.5px solid var(--color-border-tertiary); background: var(--color-background-secondary);
+  transition: all 0.15s; font-size: 18px;
+}
+.dev-btn:hover { border-color: #185FA5; background: #E6F1FB; }
+.dev-btn span { font-size: 9px; color: var(--color-text-secondary); text-align: center; line-height: 1.2; }
+.dev-btn .w { font-size: 8px; color: var(--color-text-tertiary); }
+
+.selected-panel { padding: 10px 12px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.sel-name { font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+.slider-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.slider-row label { font-size: 10px; color: var(--color-text-secondary); width: 62px; }
+.slider-row input[type=range] { flex: 1; }
+.slider-val { font-size: 10px; font-weight: 500; min-width: 28px; text-align: right; }
+.tog-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.tog-btn {
+  font-size: 10px; padding: 3px 10px; border-radius: 20px; cursor: pointer;
+  border: 0.5px solid var(--color-border-secondary); background: var(--color-background-secondary);
+  color: var(--color-text-secondary); transition: all 0.15s;
+}
+.tog-btn.on { background: #2ecc71; color: #fff; border-color: #2ecc71; }
+.rm-btn {
+  font-size: 10px; color: var(--color-text-secondary); background: none; border: none; cursor: pointer;
+  padding: 2px 6px; border-radius: 4px;
+}
+.rm-btn:hover { background: var(--color-background-danger); color: var(--color-text-danger); }
+
+.xp-bar-bg { width: 100%; height: 6px; background: var(--color-background-secondary); border-radius: 3px; overflow: hidden; margin-bottom: 3px; }
+.xp-bar-fill { height: 100%; background: #185FA5; border-radius: 3px; transition: width 0.6s; }
+.xp-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--color-text-secondary); }
+.badge { display: inline-flex; align-items: center; gap: 3px; font-size: 9px; padding: 2px 5px; border-radius: 10px; background: var(--color-background-info); color: var(--color-text-info); margin: 1px 1px 0 0; }
+.tip { font-size: 10px; color: var(--color-text-warning); line-height: 1.4; padding: 7px 10px; background: var(--color-background-warning); border-radius: var(--border-radius-md); margin: 8px 12px; }
+.hint-overlay {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.55); color: #fff; font-size: 10px; padding: 4px 10px;
+  border-radius: 20px; pointer-events: none; white-space: nowrap; z-index: 5;
+}
+</style>
+
+<div id="app">
+  <div class="topbar">
+    <h1>⚡ EnergyRoom 3D</h1>
+    <div class="pills">
+      <div class="pill active" onclick="loadScenario('blank',this)">Pusty</div>
+      <div class="pill" onclick="loadScenario('student',this)">Uczeń</div>
+      <div class="pill" onclick="loadScenario('gamer',this)">Gracz</div>
+      <div class="pill" onclick="loadScenario('remote',this)">Zdalna</div>
+    </div>
+  </div>
+  <div class="body">
+    <div style="position:relative;flex:1;">
+      <canvas id="canvas3d"></canvas>
+      <div class="hint-overlay" id="hint">Kliknij urządzenie aby edytować • przeciągnij aby obrócić widok</div>
+    </div>
+    <div class="right-panel">
+      <div class="panel-section">
+        <div class="panel-label">Dziś zużycie</div>
+        <div><span class="stat-big" id="s-kwh">0.00</span><span class="stat-unit"> kWh</span></div>
+        <div class="stat-sub" id="s-day">≈ 0.00 zł</div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">Miesięcznie</div>
+        <div><span class="stat-big" id="s-month">0.00</span><span class="stat-unit"> kWh</span></div>
+        <div class="stat-sub" id="s-mcost">≈ 0.00 zł</div>
+      </div>
+      <div class="panel-section" id="bar-section">
+        <div class="panel-label">Rozkład energii</div>
+        <div id="bars"></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">Dodaj urządzenie</div>
+        <div class="device-grid" id="dev-grid"></div>
+      </div>
+      <div class="selected-panel" id="sel-panel" style="display:none;">
+        <div class="panel-label">Edytujesz</div>
+        <div class="sel-name" id="sel-name"></div>
+        <div class="tog-row">
+          <button class="tog-btn on" id="tog-btn" onclick="toggleSel()">Włączone</button>
+          <button class="rm-btn" onclick="removeSel()">Usuń</button>
+        </div>
+        <div class="slider-row">
+          <label>Czas użycia</label>
+          <input type="range" id="h-slider" min="0" max="24" step="0.5" value="4" oninput="updateHours(this.value)">
+          <span class="slider-val" id="h-val">4h</span>
+        </div>
+        <div style="font-size:10px; color:var(--color-text-secondary);" id="sel-kwh"></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">Gamifikacja</div>
+        <div class="xp-bar-bg"><div class="xp-bar-fill" id="xp-fill" style="width:0%"></div></div>
+        <div class="xp-row"><span id="xp-lvl">Poziom 1</span><span id="xp-pts">0 XP</span></div>
+        <div id="badges" style="margin-top:4px;"></div>
+      </div>
+      <div class="tip" id="tip">Dodaj urządzenia, aby zobaczyć szacunkowe zużycie energii.</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const PRICE = 0.75;
+const DEFS = [
+  { id:'tv',    name:'Telewizor',    icon:'📺', watts:120,  color:0x185FA5, shape:'flat' },
+  { id:'pc',    name:'Komputer',     icon:'🖥️', watts:200,  color:0x3B6D11, shape:'tower' },
+  { id:'lamp',  name:'Lampa',        icon:'💡', watts:15,   color:0xBA7517, shape:'lamp' },
+  { id:'fridge',name:'Lodówka',      icon:'🧊', watts:90,   color:0x0F6E56, shape:'tall' },
+  { id:'ac',    name:'Klima',        icon:'❄️', watts:1500, color:0x534AB7, shape:'flat' },
+  { id:'game',  name:'Konsola',      icon:'🎮', watts:150,  color:0x3C3489, shape:'box' },
+  { id:'kettle',name:'Czajnik',      icon:'☕', watts:2000, color:0x663800, shape:'box' },
+  { id:'phone', name:'Telefon',      icon:'🔌', watts:18,   color:0x5F5E5A, shape:'box' },
+];
+const SCENARIOS = {
+  student: [{id:'lamp',h:6},{id:'pc',h:4},{id:'phone',h:8}],
+  gamer:   [{id:'game',h:5},{id:'tv',h:3},{id:'pc',h:4},{id:'lamp',h:4}],
+  remote:  [{id:'pc',h:8},{id:'lamp',h:8},{id:'ac',h:4},{id:'phone',h:6}],
+};
+
+let placed = [], selUid = null, nextUid = 1;
+const scene = new THREE.Scene();
+const W = () => document.getElementById('canvas3d').clientWidth;
+const H = () => document.getElementById('canvas3d').clientHeight;
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas3d'), antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 3.5, 5.5);
+camera.lookAt(0, 0.5, 0);
+
+function resize() {
+  const c = document.getElementById('canvas3d');
+  const w = c.parentElement.clientWidth, h = c.parentElement.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Lighting
+const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xfff5e0, 1.0);
+sun.position.set(3, 6, 4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.near = 0.1; sun.shadow.camera.far = 30;
+sun.shadow.camera.left = -6; sun.shadow.camera.right = 6;
+sun.shadow.camera.top = 6; sun.shadow.camera.bottom = -6;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xd0e8ff, 0.35);
+fill.position.set(-3, 2, -2);
+scene.add(fill);
+
+// Room
+function makeRoom() {
+  const mats = {
+    floor: new THREE.MeshLambertMaterial({ color: 0xc9b89a }),
+    wall:  new THREE.MeshLambertMaterial({ color: 0xf0ece4 }),
+    walld: new THREE.MeshLambertMaterial({ color: 0xe0dcd4 }),
+    ceil:  new THREE.MeshLambertMaterial({ color: 0xfaf8f5 }),
+    skirting: new THREE.MeshLambertMaterial({ color: 0xd0c8b8 }),
+  };
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), mats.floor);
+  floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+
+  // Grid on floor
+  const grid = new THREE.GridHelper(8, 16, 0xa09070, 0xa09070);
+  grid.position.y = 0.001; grid.material.opacity = 0.18; grid.material.transparent = true;
+  scene.add(grid);
+
+  const wallG = new THREE.PlaneGeometry(8, 3.5);
+  const backWall = new THREE.Mesh(wallG, mats.wall);
+  backWall.position.set(0, 1.75, -4); backWall.receiveShadow = true; scene.add(backWall);
+
+  const leftWall = new THREE.Mesh(wallG, mats.walld);
+  leftWall.rotation.y = Math.PI/2; leftWall.position.set(-4, 1.75, 0); leftWall.receiveShadow = true; scene.add(leftWall);
+
+  const rightWall = new THREE.Mesh(wallG, mats.walld);
+  rightWall.rotation.y = -Math.PI/2; rightWall.position.set(4, 1.75, 0); rightWall.receiveShadow = true; scene.add(rightWall);
+
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), mats.ceil);
+  ceil.rotation.x = Math.PI/2; ceil.position.y = 3.5; scene.add(ceil);
+
+  // Baseboard
+  for (const [x, z, ry] of [[-4,0,Math.PI/2],[4,0,-Math.PI/2],[0,-4,0],[0,4,Math.PI]]) {
+    const sb = new THREE.Mesh(new THREE.BoxGeometry(8, 0.1, 0.05), mats.skirting);
+    sb.position.set(x, 0.05, z); sb.rotation.y = ry; scene.add(sb);
+  }
+
+  // Window
+  const winFrame = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.4, 0.06), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+  winFrame.position.set(0, 2.0, -3.97); scene.add(winFrame);
+  const winGlass = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 0.04), new THREE.MeshLambertMaterial({ color: 0xa8d4f0, transparent: true, opacity: 0.45 }));
+  winGlass.position.set(0, 2.0, -3.95); scene.add(winGlass);
+  // Window cross
+  for (const [w2, h2, ox, oy] of [[0.04, 1.2, 0, 0],[1.4, 0.04, 0, 0]]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(w2, h2, 0.05), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+    bar.position.set(ox, oy + 2.0, -3.96); scene.add(bar);
+  }
+}
+makeRoom();
+
+// Particle system for energy visualization
+const particleCount = 60;
+const particleGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(particleCount * 3);
+for (let i = 0; i < particleCount; i++) {
+  pPos[i*3] = (Math.random()-0.5)*6;
+  pPos[i*3+1] = Math.random()*3;
+  pPos[i*3+2] = (Math.random()-0.5)*6;
+}
+particleGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+const particleMat = new THREE.PointsMaterial({ color: 0xffdd44, size: 0.05, transparent: true, opacity: 0 });
+const particles = new THREE.Points(particleGeo, particleMat);
+scene.add(particles);
+
+function makeDeviceMesh(def, x, z) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  const bodyMat = new THREE.MeshLambertMaterial({ color: def.color });
+  const darkMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+  const whiteMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
+  let body;
+
+  if (def.shape === 'flat') {
+    body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 0.07), bodyMat);
+    body.position.set(0, 0.55, 0);
+    const stand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.4, 0.08), darkMat);
+    stand.position.set(0, 0.2, 0);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.15), darkMat);
+    base.position.set(0, 0.025, 0);
+    group.add(stand, base);
+  } else if (def.shape === 'tower') {
+    body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.75, 0.55), bodyMat);
+    body.position.set(0, 0.375, 0);
+    const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 8), new THREE.MeshLambertMaterial({color:0x3399ff}));
+    btn.position.set(0.12, 0.6, 0.28); group.add(btn);
+  } else if (def.shape === 'tall') {
+    body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.2, 0.55), bodyMat);
+    body.position.set(0, 0.6, 0);
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.25, 0.04), darkMat);
+    handle.position.set(0.22, 0.85, 0.28); group.add(handle);
+  } else if (def.shape === 'lamp') {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.1, 8), darkMat);
+    pole.position.set(0, 0.55, 0);
+    const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.15, 0.22, 12, 1, true), bodyMat);
+    shade.position.set(0, 1.1, 0);
+    const base2 = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.06, 12), darkMat);
+    base2.position.set(0, 0.03, 0);
+    group.add(pole, shade, base2);
+    body = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshLambertMaterial({ color: 0xffffaa, emissive: 0xffffaa, emissiveIntensity: 0 }));
+    body.position.set(0, 1.03, 0);
+  } else {
+    body = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.42), bodyMat);
+    body.position.set(0, 0.15, 0);
+  }
+
+  body.castShadow = true; body.receiveShadow = true;
+  group.add(body);
+  group.userData = { bodyMat, body, originalY: 0 };
+
+  // Glow light when ON
+  const glow = new THREE.PointLight(def.color, 0, 1.5);
+  glow.position.set(0, 0.6, 0);
+  group.add(glow);
+  group.userData.glowLight = glow;
+
+  // Canvas label sprite
+  const canvas2 = document.createElement('canvas');
+  canvas2.width = 128; canvas2.height = 48;
+  const ctx = canvas2.getContext('2d');
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.roundRect(2, 2, 124, 44, 8);
+  ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.font = '18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(def.icon, 22, 32);
+  ctx.font = '13px sans-serif';
+  ctx.fillStyle = '#444';
+  ctx.fillText(def.name, 70, 30);
+  const tex = new THREE.CanvasTexture(canvas2);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+  sprite.scale.set(0.9, 0.34, 1);
+  sprite.position.set(0, 1.55, 0);
+  group.add(sprite);
+  group.userData.sprite = sprite;
+
+  scene.add(group);
+  return group;
+}
+
+function spawnDevice(defId, x, z, hours, on) {
+  const def = DEFS.find(d => d.id === defId);
+  if (!def) return;
+  const mesh = makeDeviceMesh(def, x, z);
+  const uid = nextUid++;
+  mesh.userData.uid = uid;
+  placed.push({ uid, devId: defId, hours: hours || 4, on: on !== false, mesh, animOffset: Math.random() * Math.PI * 2 });
+  setDeviceOn(placed[placed.length-1]);
+  updateStats();
+  return uid;
+}
+
+function setDeviceOn(p) {
+  const glow = p.mesh.userData.glowLight;
+  glow.intensity = p.on ? 0.8 : 0;
+}
+
+function removeSel() {
+  const p = placed.find(x => x.uid === selUid);
+  if (!p) return;
+  scene.remove(p.mesh);
+  placed = placed.filter(x => x.uid !== selUid);
+  selUid = null;
+  document.getElementById('sel-panel').style.display = 'none';
+  updateStats();
+}
+
+function toggleSel() {
+  const p = placed.find(x => x.uid === selUid);
+  if (!p) return;
+  p.on = !p.on;
+  setDeviceOn(p);
+  const btn = document.getElementById('tog-btn');
+  btn.textContent = p.on ? 'Włączone' : 'Wyłączone';
+  btn.className = 'tog-btn' + (p.on ? ' on' : '');
+  updateStats(); updateSelKwh(p);
+}
+
+function updateHours(v) {
+  const p = placed.find(x => x.uid === selUid);
+  if (!p) return;
+  p.hours = parseFloat(v);
+  document.getElementById('h-val').textContent = parseFloat(v).toFixed(v%1===0?0:1) + 'h';
+  updateStats(); updateSelKwh(p);
+}
+
+function updateSelKwh(p) {
+  const def = DEFS.find(d => d.id === p.devId);
+  const kwh = (def.watts * p.hours / 1000).toFixed(3);
+  document.getElementById('sel-kwh').textContent = p.on ? `${kwh} kWh/dzień · ${(kwh * PRICE).toFixed(2)} zł` : 'Wyłączone';
+}
+
+function selectDevice(uid) {
+  selUid = uid;
+  const p = placed.find(x => x.uid === uid);
+  if (!p) return;
+  const def = DEFS.find(d => d.id === p.devId);
+  document.getElementById('sel-panel').style.display = '';
+  document.getElementById('sel-name').textContent = def.icon + ' ' + def.name + ' · ' + def.watts + 'W';
+  document.getElementById('h-slider').value = p.hours;
+  document.getElementById('h-val').textContent = p.hours + 'h';
+  const btn = document.getElementById('tog-btn');
+  btn.textContent = p.on ? 'Włączone' : 'Wyłączone';
+  btn.className = 'tog-btn' + (p.on ? ' on' : '');
+  updateSelKwh(p);
+}
+
+function updateStats() {
+  let total = 0;
+  const perD = placed.map(p => {
+    const def = DEFS.find(d => d.id === p.devId);
+    const kwh = p.on ? def.watts * p.hours / 1000 : 0;
+    total += kwh;
+    return { name: def.name, icon: def.icon, kwh, color: def.color };
+  });
+  document.getElementById('s-kwh').textContent = total.toFixed(2);
+  document.getElementById('s-day').textContent = '≈ ' + (total * PRICE).toFixed(2) + ' zł';
+  const mo = total * 30;
+  document.getElementById('s-month').textContent = mo.toFixed(1);
+  document.getElementById('s-mcost').textContent = '≈ ' + (mo * PRICE).toFixed(2) + ' zł';
+
+  const sorted = perD.filter(x => x.kwh > 0).sort((a,b) => b.kwh - a.kwh).slice(0,5);
+  const maxK = sorted[0]?.kwh || 1;
+  document.getElementById('bars').innerHTML = sorted.map(d =>
+    `<div class="bar-row"><span class="bar-icon">${d.icon}</span><div class="bar-bg"><div class="bar-fill" style="width:${Math.round(d.kwh/maxK*100)}%;background:#${d.color.toString(16).padStart(6,'0')};"></div></div><span class="bar-nm">${d.name}</span></div>`
+  ).join('') || '<div style="font-size:10px;color:var(--color-text-tertiary);">Brak urządzeń</div>';
+
+  // Particles intensity
+  particleMat.opacity = Math.min(0.7, total * 0.04);
+
+  const xp = Math.min(100, placed.length * 13 + (total < 5 && total > 0 ? 18 : 0));
+  document.getElementById('xp-fill').style.width = xp + '%';
+  document.getElementById('xp-pts').textContent = xp + ' XP';
+  document.getElementById('xp-lvl').textContent = 'Poziom ' + (xp < 20 ? 1 : xp < 50 ? 2 : xp < 80 ? 3 : 4);
+  const bd = [];
+  if (placed.length >= 3) bd.push('🏠 Urządzony');
+  if (placed.length >= 5) bd.push('🏆 Ekspert');
+  if (total > 0 && total < 3) bd.push('🌱 Eko');
+  document.getElementById('badges').innerHTML = bd.map(b => `<div class="badge">${b}</div>`).join('');
+
+  const tips = [];
+  if (total > 10) tips.push('💡 Ponad 10 kWh! Ograniczyć klimatyzację lub wymienić na LED.');
+  else if (total > 5) tips.push('📊 Możesz zaoszczędzić skracając komputer o 1–2h dziennie.');
+  else if (total > 0) tips.push('✅ Świetne zużycie! Poniżej średniej gospodarstwa.');
+  else tips.push('Dodaj urządzenia aby zobaczyć szacunkowe zużycie energii.');
+  document.getElementById('tip').textContent = tips[0];
+}
+
+// Device buttons
+function buildDevGrid() {
+  document.getElementById('dev-grid').innerHTML = DEFS.map(d =>
+    `<div class="dev-btn" onclick="addRandom('${d.id}')">
+      <span style="font-size:18px;">${d.icon}</span>
+      <span>${d.name}</span>
+      <span class="w">${d.watts}W</span>
+    </div>`
+  ).join('');
+}
+buildDevGrid();
+
+function addRandom(devId) {
+  const x = (Math.random()-0.5) * 5;
+  const z = (Math.random()-0.5) * 5;
+  const uid = spawnDevice(devId, x, z, 4, true);
+  selectDevice(uid);
+}
+
+function loadScenario(name, el) {
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  placed.forEach(p => scene.remove(p.mesh));
+  placed = []; selUid = null; nextUid = 1;
+  document.getElementById('sel-panel').style.display = 'none';
+  if (SCENARIOS[name]) {
+    const xs = [-2, 0, 2, -1.5, 1.5, -2.5, 2.5];
+    const zs = [-1, -2, -1, 0.5, 0.5, -2.5, -2.5];
+    SCENARIOS[name].forEach((s, i) => spawnDevice(s.id, xs[i]||0, zs[i]||0, s.h, true));
+  }
+  updateStats();
+}
+
+// Raycaster for click
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const canvas3d = document.getElementById('canvas3d');
+
+canvas3d.addEventListener('click', e => {
+  const rect = canvas3d.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = placed.map(p => p.mesh).flatMap(m => { const c = []; m.traverse(x => { if (x.isMesh) c.push(x); }); return c; });
+  const hits = raycaster.intersectObjects(meshes);
+  if (hits.length > 0) {
+    let obj = hits[0].object;
+    while (obj.parent && !obj.userData.uid) obj = obj.parent;
+    if (obj.userData.uid) { selectDevice(obj.userData.uid); document.getElementById('hint').style.display = 'none'; }
+  }
+});
+
+// Orbit controls (manual)
+let isDragging = false, prevMouse = { x: 0, y: 0 };
+let spherical = { theta: 0, phi: 0.45 };
+const R = 6.5;
+
+canvas3d.addEventListener('mousedown', e => { isDragging = true; prevMouse = { x: e.clientX, y: e.clientY }; });
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = (e.clientX - prevMouse.x) * 0.008;
+  const dy = (e.clientY - prevMouse.y) * 0.005;
+  spherical.theta -= dx;
+  spherical.phi = Math.max(0.15, Math.min(1.0, spherical.phi + dy));
+  prevMouse = { x: e.clientX, y: e.clientY };
+});
+canvas3d.addEventListener('wheel', e => {
+  camera.fov = Math.max(25, Math.min(70, camera.fov + e.deltaY * 0.03));
+  camera.updateProjectionMatrix();
+});
+
+// Touch
+canvas3d.addEventListener('touchstart', e => { if (e.touches.length===1) { isDragging=true; prevMouse={x:e.touches[0].clientX,y:e.touches[0].clientY}; } });
+canvas3d.addEventListener('touchend', () => isDragging=false);
+canvas3d.addEventListener('touchmove', e => {
+  if (!isDragging || e.touches.length!==1) return;
+  const dx = (e.touches[0].clientX - prevMouse.x)*0.008;
+  const dy = (e.touches[0].clientY - prevMouse.y)*0.005;
+  spherical.theta -= dx; spherical.phi = Math.max(0.15, Math.min(1.0, spherical.phi+dy));
+  prevMouse = {x:e.touches[0].clientX,y:e.touches[0].clientY};
+  e.preventDefault();
+}, {passive:false});
+
+// Animation loop
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // Orbit camera
+  camera.position.x = R * Math.sin(spherical.theta) * Math.sin(spherical.phi);
+  camera.position.y = R * Math.cos(spherical.phi) + 0.5;
+  camera.position.z = R * Math.cos(spherical.theta) * Math.sin(spherical.phi);
+  camera.lookAt(0, 0.8, 0);
+
+  // Animate placed devices
+  placed.forEach(p => {
+    if (!p.mesh) return;
+    const hover = p.on ? Math.sin(t * 1.4 + p.animOffset) * 0.018 : 0;
+    p.mesh.position.y = p.mesh.userData.originalY + hover;
+    // Selected: highlight pulse
+    if (p.uid === selUid) {
+      p.mesh.rotation.y = Math.sin(t * 0.8) * 0.06;
+      p.mesh.userData.glowLight && (p.mesh.userData.glowLight.intensity = p.on ? 0.9 + Math.sin(t*3)*0.2 : 0);
+    } else {
+      p.mesh.rotation.y = 0;
+      p.mesh.userData.glowLight && (p.mesh.userData.glowLight.intensity = p.on ? 0.5 : 0);
+    }
+    // Lamp bulb glow
+    if (p.devId === 'lamp' && p.mesh.userData.body) {
+      p.mesh.userData.body.material.emissiveIntensity = p.on ? 0.8 + Math.sin(t*2)*0.05 : 0;
+    }
+  });
+
+  // Particles float upward
+  const pos = particles.geometry.attributes.position.array;
+  for (let i = 0; i < particleCount; i++) {
+    pos[i*3+1] += 0.004;
+    if (pos[i*3+1] > 3.4) { pos[i*3+1] = 0; pos[i*3] = (Math.random()-0.5)*5; pos[i*3+2] = (Math.random()-0.5)*5; }
+  }
+  particles.geometry.attributes.position.needsUpdate = true;
+  particles.rotation.y = t * 0.03;
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>

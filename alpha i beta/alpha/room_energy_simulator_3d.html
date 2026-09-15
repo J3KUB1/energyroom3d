@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans, sans-serif); background: transparent; color: var(--color-text-primary); }
+
+  .app { display: flex; flex-direction: column; gap: 0; min-height: 600px; }
+
+  .top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 0.5px solid var(--color-border-tertiary);
+    background: var(--color-background-primary);
+  }
+  .top-bar h1 { font-size: 15px; font-weight: 500; }
+  .scenario-pills { display: flex; gap: 6px; }
+  .pill {
+    font-size: 11px; padding: 4px 10px; border-radius: 20px; cursor: pointer;
+    border: 0.5px solid var(--color-border-secondary); background: var(--color-background-secondary);
+    color: var(--color-text-secondary); transition: all 0.15s;
+  }
+  .pill.active { background: #185FA5; color: #E6F1FB; border-color: #185FA5; }
+
+  .main { display: flex; gap: 0; flex: 1; }
+
+  .sidebar {
+    width: 220px; min-width: 220px; border-right: 0.5px solid var(--color-border-tertiary);
+    background: var(--color-background-secondary); padding: 12px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .sidebar-title { font-size: 11px; font-weight: 500; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+
+  .device-item {
+    display: flex; align-items: center; gap: 8px; padding: 7px 8px;
+    border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary);
+    background: var(--color-background-primary); cursor: grab; user-select: none;
+    transition: all 0.15s; font-size: 13px;
+  }
+  .device-item:hover { border-color: var(--color-border-primary); background: var(--color-background-secondary); }
+  .device-item:active { cursor: grabbing; transform: scale(0.97); }
+  .device-icon { font-size: 16px; width: 20px; text-align: center; }
+  .device-watt { font-size: 11px; color: var(--color-text-tertiary); margin-left: auto; }
+
+  .room-wrap { flex: 1; display: flex; flex-direction: column; }
+
+  .canvas-area {
+    position: relative; flex: 1; min-height: 300px;
+    background: linear-gradient(160deg, #e8f0f8 0%, #dde8f0 100%);
+    overflow: hidden; cursor: default;
+  }
+
+  .floor {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 120px;
+    background: linear-gradient(180deg, #c9b89a 0%, #b8a888 100%);
+    border-top: 2px solid #a09070;
+  }
+  .back-wall {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 120px;
+    background: linear-gradient(180deg, #f5f0e8 0%, #ede8e0 100%);
+  }
+  .wall-left {
+    position: absolute; bottom: 0; left: 0; width: 60px; height: 100%;
+    background: linear-gradient(90deg, #ddd5c8 0%, transparent 100%);
+  }
+  .wall-right {
+    position: absolute; bottom: 0; right: 0; width: 60px; height: 100%;
+    background: linear-gradient(270deg, #ddd5c8 0%, transparent 100%);
+  }
+  .grid-lines {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 120px; pointer-events: none; opacity: 0.25;
+  }
+
+  .drop-zone {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    width: 90%; height: 110px; border: 2px dashed rgba(24,95,165,0.3);
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    color: rgba(24,95,165,0.5); font-size: 12px; pointer-events: none;
+    transition: all 0.2s;
+  }
+  .drop-zone.highlight { border-color: rgba(24,95,165,0.7); background: rgba(24,95,165,0.05); }
+
+  .placed-device {
+    position: absolute; cursor: pointer; user-select: none;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    transition: transform 0.1s;
+  }
+  .placed-device:hover .device-bubble { transform: scale(1.08); }
+  .placed-device.selected .device-bubble { outline: 2px solid #185FA5; outline-offset: 2px; }
+  .device-bubble {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--color-background-primary); border: 0.5px solid var(--color-border-secondary);
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12); transition: transform 0.15s;
+  }
+  .device-label { font-size: 9px; color: #444; background: rgba(255,255,255,0.85); padding: 1px 4px; border-radius: 3px; white-space: nowrap; }
+  .device-power-dot {
+    position: absolute; top: -3px; right: -3px; width: 10px; height: 10px;
+    border-radius: 50%; border: 1.5px solid white;
+  }
+  .dot-on { background: #2ecc71; }
+  .dot-off { background: #aaa; }
+
+  .detail-panel {
+    height: 160px; border-top: 0.5px solid var(--color-border-tertiary);
+    background: var(--color-background-primary); padding: 12px 16px;
+    display: flex; gap: 16px;
+  }
+  .detail-left { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .detail-device-name { font-size: 14px; font-weight: 500; }
+  .detail-hint { font-size: 12px; color: var(--color-text-tertiary); font-style: italic; }
+
+  .slider-row { display: flex; align-items: center; gap: 8px; }
+  .slider-row label { font-size: 12px; color: var(--color-text-secondary); width: 80px; }
+  .slider-row input[type=range] { flex: 1; }
+  .slider-val { font-size: 12px; font-weight: 500; min-width: 36px; text-align: right; }
+
+  .toggle-btn {
+    font-size: 12px; padding: 5px 12px; border-radius: 20px; cursor: pointer;
+    border: 0.5px solid var(--color-border-secondary); background: var(--color-background-secondary);
+    color: var(--color-text-secondary); transition: all 0.15s;
+  }
+  .toggle-btn.on { background: #2ecc71; color: #fff; border-color: #2ecc71; }
+
+  .remove-btn {
+    font-size: 11px; color: var(--color-text-secondary); background: none; border: none; cursor: pointer;
+    padding: 4px 8px; border-radius: 4px; transition: background 0.1s; margin-top: auto;
+  }
+  .remove-btn:hover { background: var(--color-background-danger); color: var(--color-text-danger); }
+
+  .stats-panel { width: 200px; min-width: 200px; display: flex; flex-direction: column; gap: 0; }
+
+  .stat-block {
+    padding: 10px 14px; border-bottom: 0.5px solid var(--color-border-tertiary);
+  }
+  .stat-label { font-size: 10px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+  .stat-value { font-size: 22px; font-weight: 500; }
+  .stat-unit { font-size: 11px; color: var(--color-text-secondary); }
+  .stat-sub { font-size: 11px; color: var(--color-text-secondary); margin-top: 2px; }
+
+  .energy-bar-wrap { padding: 10px 14px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .energy-bar-label { font-size: 10px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .bar-icon { font-size: 12px; width: 16px; }
+  .bar-bg { flex: 1; height: 6px; background: var(--color-background-secondary); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .bar-name { font-size: 10px; color: var(--color-text-secondary); width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .xp-block { padding: 10px 14px; }
+  .xp-label { font-size: 10px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .xp-bar-bg { width: 100%; height: 8px; background: var(--color-background-secondary); border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
+  .xp-bar-fill { height: 100%; background: #185FA5; border-radius: 4px; transition: width 0.5s; }
+  .xp-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--color-text-secondary); }
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 6px; border-radius: 10px; background: var(--color-background-info); color: var(--color-text-info); margin-top: 4px; }
+
+  .tip-box {
+    margin: 8px 14px; padding: 7px 10px; border-radius: var(--border-radius-md);
+    background: var(--color-background-warning); border: 0.5px solid var(--color-border-warning);
+    font-size: 11px; color: var(--color-text-warning); line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top-bar">
+    <h1>⚡ EnergyRoom 3D</h1>
+    <div class="scenario-pills">
+      <div class="pill active" onclick="loadScenario('blank')">Pusty pokój</div>
+      <div class="pill" onclick="loadScenario('student')">Uczeń</div>
+      <div class="pill" onclick="loadScenario('gamer')">Gracz</div>
+      <div class="pill" onclick="loadScenario('remote')">Praca zdalna</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="sidebar">
+      <div class="sidebar-title">Urządzenia</div>
+      <div class="sidebar-title" style="margin-top:4px; font-size:10px; color:var(--color-text-tertiary);">↓ przeciągnij do pokoju</div>
+      <div id="device-list"></div>
+    </div>
+
+    <div class="room-wrap">
+      <div class="canvas-area" id="canvas"
+        ondragover="event.preventDefault(); document.querySelector('.drop-zone').classList.add('highlight')"
+        ondragleave="document.querySelector('.drop-zone').classList.remove('highlight')"
+        ondrop="handleDrop(event)">
+        <div class="back-wall"></div>
+        <div class="wall-left"></div>
+        <div class="wall-right"></div>
+        <div class="floor"></div>
+        <div class="drop-zone" id="drop-zone">Upuść urządzenie tutaj</div>
+        <div id="placed-devices"></div>
+      </div>
+
+      <div class="detail-panel" id="detail-panel">
+        <div class="detail-left">
+          <div class="detail-hint" id="detail-hint">Kliknij na urządzenie w pokoju, aby edytować</div>
+          <div id="detail-controls" style="display:none; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div class="detail-device-name" id="detail-name"></div>
+              <button class="toggle-btn" id="toggle-btn" onclick="toggleDevice()">Włączone</button>
+            </div>
+            <div class="slider-row">
+              <label>Czas użycia</label>
+              <input type="range" id="hours-slider" min="0" max="24" step="0.5" value="4" oninput="updateHours(this.value)">
+              <span class="slider-val" id="hours-val">4h</span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span id="detail-kwh" style="font-size:12px; color:var(--color-text-secondary);"></span>
+              <button class="remove-btn" onclick="removeSelected()">Usuń</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-panel">
+      <div class="stat-block">
+        <div class="stat-label">Dziś zużycie</div>
+        <div><span class="stat-value" id="stat-kwh">0.00</span><span class="stat-unit"> kWh</span></div>
+        <div class="stat-sub" id="stat-day-cost">≈ 0.00 zł</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-label">Miesięcznie</div>
+        <div><span class="stat-value" id="stat-month">0.00</span><span class="stat-unit"> kWh</span></div>
+        <div class="stat-sub" id="stat-month-cost">≈ 0.00 zł</div>
+      </div>
+      <div class="energy-bar-wrap">
+        <div class="energy-bar-label">Rozkład energii</div>
+        <div id="energy-bars"></div>
+      </div>
+      <div class="xp-block">
+        <div class="xp-label">Poziom oszczędności</div>
+        <div class="xp-bar-bg"><div class="xp-bar-fill" id="xp-bar" style="width:0%"></div></div>
+        <div class="xp-row"><span id="xp-level">Poziom 1</span><span id="xp-pts">0 XP</span></div>
+        <div id="badges-row"></div>
+      </div>
+      <div class="tip-box" id="tip-box">Dodaj urządzenia do pokoju, aby zobaczyć szacunkowe zużycie energii.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEVICES = [
+  { id:'tv',    name:'Telewizor',     icon:'📺', watts:120, color:'#185FA5' },
+  { id:'pc',    name:'Komputer',      icon:'🖥️',  watts:200, color:'#3B6D11' },
+  { id:'lamp',  name:'Oświetlenie',   icon:'💡', watts:15,  color:'#BA7517' },
+  { id:'fridge',name:'Lodówka',       icon:'🧊', watts:90,  color:'#0F6E56' },
+  { id:'ac',    name:'Klimatyzacja',  icon:'❄️',  watts:1500,color:'#534AB7' },
+  { id:'micro', name:'Mikrofala',     icon:'📡', watts:1000,color:'#993556' },
+  { id:'wash',  name:'Pralka',        icon:'🌀', watts:500, color:'#993C1D' },
+  { id:'phone', name:'Ładow. telefon',icon:'🔌', watts:18,  color:'#5F5E5A' },
+  { id:'game',  name:'Konsola',       icon:'🎮', watts:150, color:'#3C3489' },
+  { id:'kettle',name:'Czajnik',       icon:'☕', watts:2000,color:'#663800' },
+];
+
+const PRICE_PLN = 0.75;
+const SCENARIOS = {
+  student: [
+    { devId:'lamp', hours:6, on:true },
+    { devId:'pc',   hours:4, on:true },
+    { devId:'phone',hours:8, on:true },
+  ],
+  gamer: [
+    { devId:'game', hours:5, on:true },
+    { devId:'tv',   hours:3, on:true },
+    { devId:'pc',   hours:4, on:true },
+    { devId:'lamp', hours:4, on:true },
+  ],
+  remote: [
+    { devId:'pc',    hours:8, on:true },
+    { devId:'lamp',  hours:8, on:true },
+    { devId:'phone', hours:6, on:true },
+    { devId:'kettle',hours:0.5,on:true},
+    { devId:'ac',    hours:4, on:true },
+  ],
+};
+
+let placed = [];
+let selectedId = null;
+let nextId = 1;
+
+function renderDeviceList() {
+  const el = document.getElementById('device-list');
+  el.innerHTML = DEVICES.map(d => `
+    <div class="device-item" draggable="true"
+      ondragstart="startDrag('${d.id}')"
+      onclick="addDevice('${d.id}')">
+      <span class="device-icon">${d.icon}</span>
+      <span>${d.name}</span>
+      <span class="device-watt">${d.watts}W</span>
+    </div>
+  `).join('');
+}
+
+let dragDevId = null;
+function startDrag(devId) { dragDevId = devId; }
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.querySelector('.drop-zone').classList.remove('highlight');
+  if (dragDevId) { addDevice(dragDevId); dragDevId = null; }
+}
+
+function addDevice(devId) {
+  const dev = DEVICES.find(d => d.id === devId);
+  if (!dev) return;
+  const canvas = document.getElementById('canvas');
+  const rect = canvas.getBoundingClientRect();
+  const maxX = 80, minX = 8;
+  const randLeft = Math.floor(Math.random() * (maxX - minX) + minX);
+  const positions = [12, 25, 40, 55, 68, 80];
+  const randBottom = positions[Math.floor(Math.random() * positions.length)];
+  placed.push({ uid: nextId++, devId, hours: 4, on: true, left: randLeft, bottom: randBottom });
+  renderRoom();
+  selectDevice(nextId - 1);
+  updateStats();
+}
+
+function renderRoom() {
+  const el = document.getElementById('placed-devices');
+  el.innerHTML = placed.map(p => {
+    const dev = DEVICES.find(d => d.id === p.devId);
+    const isSelected = p.uid === selectedId;
+    return `<div class="placed-device${isSelected ? ' selected' : ''}"
+      style="left:${p.left}%; bottom:${p.bottom}px; z-index:${isSelected ? 10 : 5};"
+      onclick="selectDevice(${p.uid})">
+      <div class="device-bubble">
+        ${dev.icon}
+        <div class="device-power-dot ${p.on ? 'dot-on' : 'dot-off'}"></div>
+      </div>
+      <div class="device-label">${dev.name}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectDevice(uid) {
+  selectedId = uid;
+  renderRoom();
+  const p = placed.find(x => x.uid === uid);
+  if (!p) return;
+  const dev = DEVICES.find(d => d.id === p.devId);
+  document.getElementById('detail-hint').style.display = 'none';
+  const ctrl = document.getElementById('detail-controls');
+  ctrl.style.display = 'flex';
+  document.getElementById('detail-name').textContent = dev.name + ' · ' + dev.watts + 'W';
+  document.getElementById('hours-slider').value = p.hours;
+  document.getElementById('hours-val').textContent = p.hours + 'h';
+  const btn = document.getElementById('toggle-btn');
+  btn.textContent = p.on ? 'Włączone' : 'Wyłączone';
+  btn.className = 'toggle-btn' + (p.on ? ' on' : '');
+  updateDetailKwh(p, dev);
+}
+
+function updateDetailKwh(p, dev) {
+  const kwh = (dev.watts * p.hours / 1000).toFixed(3);
+  document.getElementById('detail-kwh').textContent = p.on ? `${kwh} kWh/dzień · ${(kwh * PRICE_PLN).toFixed(2)} zł` : 'Wyłączone';
+}
+
+function updateHours(val) {
+  const p = placed.find(x => x.uid === selectedId);
+  if (!p) return;
+  p.hours = parseFloat(val);
+  document.getElementById('hours-val').textContent = parseFloat(val).toFixed(val % 1 === 0 ? 0 : 1) + 'h';
+  const dev = DEVICES.find(d => d.id === p.devId);
+  updateDetailKwh(p, dev);
+  updateStats();
+}
+
+function toggleDevice() {
+  const p = placed.find(x => x.uid === selectedId);
+  if (!p) return;
+  p.on = !p.on;
+  renderRoom();
+  selectDevice(selectedId);
+  updateStats();
+}
+
+function removeSelected() {
+  placed = placed.filter(x => x.uid !== selectedId);
+  selectedId = null;
+  document.getElementById('detail-hint').style.display = '';
+  document.getElementById('detail-controls').style.display = 'none';
+  renderRoom();
+  updateStats();
+}
+
+function updateStats() {
+  let total = 0;
+  const perDev = placed.map(p => {
+    const dev = DEVICES.find(d => d.id === p.devId);
+    const kwh = p.on ? dev.watts * p.hours / 1000 : 0;
+    total += kwh;
+    return { name: dev.name, icon: dev.icon, kwh, color: dev.color };
+  });
+
+  document.getElementById('stat-kwh').textContent = total.toFixed(2);
+  document.getElementById('stat-day-cost').textContent = '≈ ' + (total * PRICE_PLN).toFixed(2) + ' zł';
+  const monthly = total * 30;
+  document.getElementById('stat-month').textContent = monthly.toFixed(1);
+  document.getElementById('stat-month-cost').textContent = '≈ ' + (monthly * PRICE_PLN).toFixed(2) + ' zł';
+
+  const barsEl = document.getElementById('energy-bars');
+  const sorted = perDev.filter(x => x.kwh > 0).sort((a,b) => b.kwh - a.kwh).slice(0, 5);
+  const maxKwh = sorted[0]?.kwh || 1;
+  barsEl.innerHTML = sorted.map(d => `
+    <div class="bar-row">
+      <span class="bar-icon">${d.icon}</span>
+      <div class="bar-bg"><div class="bar-fill" style="width:${Math.round(d.kwh/maxKwh*100)}%; background:${d.color};"></div></div>
+      <span class="bar-name">${d.name}</span>
+    </div>
+  `).join('') || '<div style="font-size:11px; color:var(--color-text-tertiary);">Brak urządzeń</div>';
+
+  const xp = Math.min(100, Math.round(placed.length * 12 + (total < 5 ? 20 : total < 10 ? 10 : 0)));
+  document.getElementById('xp-bar').style.width = xp + '%';
+  document.getElementById('xp-pts').textContent = xp + ' XP';
+  const lvl = xp < 20 ? 1 : xp < 50 ? 2 : xp < 80 ? 3 : 4;
+  document.getElementById('xp-level').textContent = 'Poziom ' + lvl;
+
+  const badges = [];
+  if (placed.length >= 3) badges.push('🏠 Urządzony pokój');
+  if (placed.length >= 6) badges.push('🏆 Ekspert');
+  if (total > 0 && total < 3) badges.push('🌱 Eko-mistrz');
+  if (placed.some(p => placed.find(x => x.uid === p.uid && p.devId === 'ac'))) badges.push('❄️ Komfort');
+  document.getElementById('badges-row').innerHTML = badges.map(b => `<div class="badge">${b}</div>`).join('');
+
+  const tips = [];
+  if (total > 10) tips.push('💡 Zużycie ponad 10 kWh/dzień! Spróbuj ograniczyć klimatyzację lub zastąpić żarówki LED.');
+  else if (total > 5) tips.push('📊 Dobry wynik! Możesz oszczędzić, skracając czas użycia komputera o 1–2h.');
+  else if (total > 0) tips.push('✅ Świetne zużycie energii! Jesteś poniżej średniej gospodarstwa domowego.');
+  else tips.push('Dodaj urządzenia do pokoju, aby zobaczyć szacunkowe zużycie energii.');
+  if (placed.some(p => p.devId === 'ac' && p.on && p.hours > 6)) tips.push('❄️ Klimatyzacja powyżej 6h — rozważ ustawienie timera lub podwyższenie temperatury o 2°C.');
+  document.getElementById('tip-box').textContent = tips[0];
+}
+
+function loadScenario(name) {
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  placed = [];
+  selectedId = null;
+  nextId = 1;
+  document.getElementById('detail-hint').style.display = '';
+  document.getElementById('detail-controls').style.display = 'none';
+
+  if (SCENARIOS[name]) {
+    const positions = [10, 20, 32, 50, 65, 78, 88];
+    SCENARIOS[name].forEach((s, i) => {
+      placed.push({ uid: nextId++, devId: s.devId, hours: s.hours, on: s.on, left: positions[i % positions.length], bottom: [15, 30, 20, 35, 18, 28][i % 6] });
+    });
+  }
+  renderRoom();
+  updateStats();
+}
+
+renderDeviceList();
+renderRoom();
+updateStats();
+</script>
+</body>
+</html>
