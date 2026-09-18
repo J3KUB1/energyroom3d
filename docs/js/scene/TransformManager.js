@@ -109,6 +109,7 @@ class TransformManager {
     inst.position = { x:inst.group.position.x, y:inst.group.position.y, z:inst.group.position.z };
     inst.rotation = { x:inst.group.rotation.x, y:inst.group.rotation.y, z:inst.group.rotation.z };
     inst.scale = { x:inst.group.scale.x, y:inst.group.scale.y, z:inst.group.scale.z };
+    if (inst.kind==='solar') this.om.computePVOrientation(inst); // gizmo drag bypasses applyTransform - recompute here (section 15)
     this.onTransformCommit(inst);
   }
 

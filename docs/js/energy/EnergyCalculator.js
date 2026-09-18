@@ -13,19 +13,39 @@ const EnergyCalculator = {
     const feeShare = periodDays>0 ? (extraFeesPerMonth * (daysInPeriod/periodDays)) : 0;
     return energyCost + feeShare;
   },
-  /** Tariff-aware price for a given minute-of-day (0..1439). tariff={mode:'flat'|'dual', pricePerKWh, priceDay, priceNight, nightStart, nightEnd} */
-  priceAt(minuteOfDay, tariff){
-    if (!tariff || tariff.mode !== 'dual') return (tariff&&tariff.pricePerKWh) || 1;
-    const toMin = (hhmm)=>{ const [h,m]=hhmm.split(':').map(Number); return h*60+m; };
-    const s = toMin(tariff.nightStart||'22:00'), e = toMin(tariff.nightEnd||'06:00');
-    const inNight = s<e ? (minuteOfDay>=s && minuteOfDay<e) : (minuteOfDay>=s || minuteOfDay<e);
-    return inNight ? tariff.priceNight : tariff.priceDay;
+  /** Tariff+schedule-aware price (PLN/kWh) at an ABSOLUTE simulated minute (day-of-week aware,
+   *  e.g. G12w charges the cheap rate all weekend). `settings` is the project's energySettings,
+   *  which carries {tariffCode, tariffPrices:{code:{rate:price}}, tariffSchedules:{code:richSchedule}}. */
+  priceAt(absMin, settings){
+    const s = settings || {};
+    const tariff = TariffManager.get(s.tariffCode || 'G11');
+    const schedule = (s.tariffSchedules && s.tariffSchedules[tariff.code]) || tariff.buildDefaultSchedule();
+    const prices = (s.tariffPrices && s.tariffPrices[tariff.code]) || tariff.defaultPrices;
+    return TariffManager.priceAt(tariff, prices, schedule, absMin);
   },
-  isNightRate(minuteOfDay, tariff){
-    if (!tariff || tariff.mode!=='dual') return false;
-    const toMin = (hhmm)=>{ const [h,m]=hhmm.split(':').map(Number); return h*60+m; };
-    const s = toMin(tariff.nightStart||'22:00'), e = toMin(tariff.nightEnd||'06:00');
-    return s<e ? (minuteOfDay>=s && minuteOfDay<e) : (minuteOfDay>=s || minuteOfDay<e);
+  /** Effective blended PLN/kWh for the tariff as currently configured - averages all rates evenly.
+   *  Used only by quick device-ranking estimates that don't need per-minute precision. */
+  effectivePrice(settings){
+    const s = settings || {};
+    const tariff = TariffManager.get(s.tariffCode || 'G11');
+    const prices = (s.tariffPrices && s.tariffPrices[tariff.code]) || tariff.defaultPrices;
+    const vals = tariff.rates.map(r=> prices[r.id] != null ? prices[r.id] : tariff.defaultPrices[r.id]);
+    return vals.reduce((a,b)=>a+b,0) / (vals.length||1);
+  },
+  /** True if `absMin` currently sits in the tariff's cheapest configured rate window. */
+  isCheapRateAt(absMin, settings){
+    const s = settings || {};
+    const tariff = TariffManager.get(s.tariffCode || 'G11');
+    const schedule = (s.tariffSchedules && s.tariffSchedules[tariff.code]) || tariff.buildDefaultSchedule();
+    const prices = (s.tariffPrices && s.tariffPrices[tariff.code]) || tariff.defaultPrices;
+    return !TariffManager.isFlat(tariff.code) && TariffManager.isCheapestRateAt(tariff, prices, schedule, absMin);
+  },
+  isExpensiveRateAt(absMin, settings){
+    const s = settings || {};
+    const tariff = TariffManager.get(s.tariffCode || 'G11');
+    const schedule = (s.tariffSchedules && s.tariffSchedules[tariff.code]) || tariff.buildDefaultSchedule();
+    const prices = (s.tariffPrices && s.tariffPrices[tariff.code]) || tariff.defaultPrices;
+    return !TariffManager.isFlat(tariff.code) && TariffManager.isMostExpensiveRateAt(tariff, prices, schedule, absMin);
   },
   co2(kWh, factorKgPerKWh){
     return kWh * factorKgPerKWh;

@@ -33,8 +33,8 @@
 
     <div class="topbar-center">
       <div class="mode-switch" id="modeSwitch">
-        <button class="mode-btn active" data-mode="edit">Edycja</button>
-        <button class="mode-btn" data-mode="sim">Symulacja</button>
+        <button class="mode-btn active" data-mode="edit" data-i18n="mode.edit">Edycja</button>
+        <button class="mode-btn" data-mode="sim" data-i18n="mode.sim">Symulacja</button>
       </div>
       <div class="sim-controls hidden" id="simControls">
         <button id="playPauseBtn" class="icon-btn" title="Play/Pause (Space)">▶</button>
@@ -62,6 +62,7 @@
       <button class="tb-btn" id="btnRoomSettings" title="Ustawienia pokoju">🏠 <span class="tb-label">Pokój</span></button>
       <button class="tb-btn" id="btnSmartHome" title="Smart Home">🧠 <span class="tb-label">Smart Home</span></button>
       <button class="tb-btn accent" id="btnDashboard" title="Energy Dashboard">📊 <span class="tb-label">Dashboard</span></button>
+      <button class="tb-btn" id="btnPvInstall" title="PV install" data-i18n-title="pv.installMode">☀ <span class="tb-label" data-i18n="pv.installMode">Instalacja PV</span></button>
       <button class="tb-btn" id="btnSettings" title="Ustawienia">⚙</button>
     </div>
   </header>
@@ -140,10 +141,12 @@
       <div id="tooltip" class="tooltip hidden"></div>
       <div id="toastArea" class="toast-area"></div>
 
-      <!-- Virtual network pet - purely cosmetic companion, lives "in the cables" -->
-      <div id="petWidget" class="pet-widget" title="Twój zwierzak sieciowy">
+      <!-- Data-companion & advisor: still purely cosmetic itself (never changes energy numbers directly),
+           but now observes real simulation data and surfaces contextual tips + a task list (section 16-19). -->
+      <div id="petWidget" class="pet-widget" title="Twój asystent">
         <div class="pet-avatar" id="petAvatar">✨</div>
         <div class="pet-level-badge" id="petLevelBadge">1</div>
+        <div class="pet-tip-dot hidden" id="petTipDot"></div>
       </div>
       <div id="petPanel" class="pet-panel hidden">
         <div class="pet-panel-header">
@@ -154,17 +157,25 @@
           <div class="pet-avatar-big" id="petAvatarBig">✨</div>
           <div class="pet-stage-info">
             <div class="pet-stage-name" id="petStageName">Bit</div>
-            <div class="pet-level-label">Poziom <span id="petLevelNum">1</span></div>
+            <div class="pet-level-label"><span data-i18n="pet.level">Poziom</span> <span id="petLevelNum">1</span></div>
+            <div class="pet-level-label" id="petMaxLabel" style="font-size:10px;opacity:0.7"></div>
           </div>
         </div>
-        <div class="xyz-head" style="grid-template-columns:1fr;margin-top:10px"><span>DOŚWIADCZENIE</span></div>
+        <div class="xyz-head" style="grid-template-columns:1fr;margin-top:10px"><span data-i18n="pet.xp">DOŚWIADCZENIE</span></div>
         <div class="soc-bar"><div class="soc-fill" id="petXpFill" style="width:0%"></div></div>
         <div style="font-size:11px;color:var(--text-3);margin-top:3px" id="petXpLabel">0 / 80 XP</div>
         <div class="xyz-head" style="grid-template-columns:1fr;margin-top:12px"><span>NASTRÓJ</span></div>
         <div class="soc-bar"><div class="soc-fill" id="petMoodFill" style="width:80%;background:linear-gradient(90deg,#67c8ff,#3ee79b)"></div></div>
-        <button class="primary-btn" id="petFeedBtn" style="width:100%;margin-top:14px">🍬 Nakarm bitami danych</button>
+        <button class="primary-btn" id="petFeedBtn" style="width:100%;margin-top:14px" data-i18n="pet.feed">🍬 Nakarm bitami danych</button>
         <div id="petTricks" class="pet-tricks"></div>
-        <div style="font-size:11px;color:var(--text-3);margin-top:12px;line-height:1.5">Zwierzak żyje w kablach sieci domowej — karmi się automatycznie "bitami danych", gdy Twoje urządzenia sieciowe/komputery pracują w Trybie symulacji. To czysta kosmetyka — nie wpływa na zużycie energii ani koszty.</div>
+        <div class="pet-tabs">
+          <button class="pet-tab active" data-pettab="tips" data-i18n="pet.tips">Porady</button>
+          <button class="pet-tab" data-pettab="quests" data-i18n="pet.quests">Zadania</button>
+          <button class="pet-tab" data-pettab="unlocks" data-i18n="pet.unlocks">Odblokowane</button>
+        </div>
+        <div class="pet-tab-pane" id="petPaneTips"></div>
+        <div class="pet-tab-pane hidden" id="petPaneQuests"></div>
+        <div class="pet-tab-pane hidden" id="petPaneUnlocks"></div>
       </div>
 
       <div id="tutorialOverlay" class="tutorial-overlay hidden">
@@ -194,16 +205,16 @@
 
   <!-- ============ BOTTOM: energy monitor ============ -->
   <footer id="energyMonitor">
-    <div class="em-card"><div class="em-label">ZUŻYCIE TERAZ</div><div class="em-value" id="emPower">0 W</div></div>
-    <div class="em-card"><div class="em-label">PRODUKCJA PV</div><div class="em-value good" id="emGen">0 W</div></div>
-    <div class="em-card"><div class="em-label">BILANS NETTO</div><div class="em-value" id="emNet">0 W</div></div>
-    <div class="em-card"><div class="em-label">DZISIAJ</div><div class="em-value" id="emToday">0.00 kWh</div></div>
-    <div class="em-card"><div class="em-label">KOSZT NETTO DZIŚ</div><div class="em-value" id="emCostToday">0.00 PLN</div></div>
-    <div class="em-card"><div class="em-label">KOSZT MIESIĄCA</div><div class="em-value" id="emCostMonth">0.00 PLN</div></div>
-    <div class="em-card"><div class="em-label">KOSZT ROKU</div><div class="em-value" id="emCostYear">0.00 PLN</div></div>
-    <div class="em-card"><div class="em-label">AKTYWNE</div><div class="em-value" id="emActive">0</div></div>
-    <div class="em-card"><div class="em-label">CO₂ (rok, szac.)</div><div class="em-value" id="emCO2">0 kg</div></div>
-    <div class="em-card hidden" id="emBatteryCard"><div class="em-label">MAGAZYN ENERGII</div><div class="em-value" id="emBattery">0%</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="footer.usageNow">ZUŻYCIE TERAZ</div><div class="em-value" id="emPower">0 W</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="footer.pvProduction">PRODUKCJA PV</div><div class="em-value good" id="emGen">0 W</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="footer.netBalance">BILANS NETTO</div><div class="em-value" id="emNet">0 W</div></div>
+    <div class="em-card" id="emTodayCard"><div class="em-label" data-i18n="footer.today">DZISIAJ</div><div class="em-value" id="emToday">0.00 kWh</div></div>
+    <div class="em-card" id="emCostTodayCard"><div class="em-label" data-i18n="footer.netCostToday">KOSZT NETTO DZIŚ</div><div class="em-value" id="emCostToday">0.00 PLN</div></div>
+    <div class="em-card" id="emCostMonthCard"><div class="em-label" data-i18n="footer.costMonth">KOSZT MIESIĄCA</div><div class="em-value" id="emCostMonth">0.00 PLN</div></div>
+    <div class="em-card" id="emCostYearCard"><div class="em-label" data-i18n="footer.costYear">KOSZT ROKU</div><div class="em-value" id="emCostYear">0.00 PLN</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="footer.active">AKTYWNE</div><div class="em-value" id="emActive">0</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="footer.co2Year">CO₂ (rok, szac.)</div><div class="em-value" id="emCO2">0 kg</div></div>
+    <div class="em-card hidden" id="emBatteryCard"><div class="em-label" data-i18n="footer.battery">MAGAZYN ENERGII</div><div class="em-value" id="emBattery">0%</div></div>
     <div class="em-alerts" id="emAlerts"></div>
   </footer>
 </div>
@@ -212,19 +223,22 @@
 <div class="modal-backdrop hidden" id="dashboardModal">
   <div class="modal wide">
     <div class="modal-header">
-      <h2>Energy Dashboard</h2>
+      <h2 data-i18n="nav.dashboard">Energy Dashboard</h2>
       <button class="modal-close" data-close="dashboardModal">✕</button>
     </div>
     <div class="modal-body" id="dashboardBody">
       <div class="dash-cards" id="dashCards"></div>
+      <div class="dash-card-detail hidden" id="dashCardDetail"></div>
       <div class="dash-tabs" id="dashTabs">
-        <button class="dtab active" data-tab="charts">Wykresy</button>
-        <button class="dtab" data-tab="ranking">Ranking urządzeń</button>
-        <button class="dtab" data-tab="score">Efektywność</button>
+        <button class="dtab active" data-tab="charts" data-i18n="dash.tab.charts">Wykresy</button>
+        <button class="dtab" data-tab="ranking" data-i18n="dash.tab.ranking">Ranking urządzeń</button>
+        <button class="dtab" data-tab="score" data-i18n="dash.tab.score">Efektywność</button>
         <button class="dtab" id="tabSolar" data-tab="solar">☀ Energia</button>
-        <button class="dtab" data-tab="scenarios">📐 Scenariusze</button>
-        <button class="dtab" data-tab="whatif">Co jeśli?</button>
-        <button class="dtab" data-tab="compare">Porównanie</button>
+        <button class="dtab" data-tab="stats">📅 <span data-i18n="dash.tab.stats">Statystyki</span></button>
+        <button class="dtab" data-tab="savings">💰 <span data-i18n="dash.tab.savings">Oszczędności</span></button>
+        <button class="dtab" data-tab="scenarios">📐 <span data-i18n="dash.tab.scenarios">Scenariusze</span></button>
+        <button class="dtab" data-tab="whatif" data-i18n="dash.tab.whatif">Co jeśli?</button>
+        <button class="dtab" data-tab="compare" data-i18n="dash.tab.compare">Porównanie</button>
       </div>
       <div class="dash-pane" id="paneCharts">
         <div class="chart-grid">
@@ -249,6 +263,12 @@
       <div class="dash-pane hidden" id="paneSolar">
         <div id="paneSolarInner"></div>
       </div>
+      <div class="dash-pane hidden" id="paneStats">
+        <div id="statsInner"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneSavings">
+        <div id="savingsInner"></div>
+      </div>
       <div class="dash-pane hidden" id="paneScenarios">
         <div id="scenariosPanel"></div>
       </div>
@@ -265,7 +285,7 @@
 <!-- ============ ROOM SETTINGS MODAL ============ -->
 <div class="modal-backdrop hidden" id="roomSettingsModal">
   <div class="modal">
-    <div class="modal-header"><h2>Room Settings</h2><button class="modal-close" data-close="roomSettingsModal">✕</button></div>
+    <div class="modal-header"><h2 data-i18n="nav.roomSettings">Room Settings</h2><button class="modal-close" data-close="roomSettingsModal">✕</button></div>
     <div class="modal-body" id="roomSettingsBody"></div>
   </div>
 </div>
@@ -281,9 +301,35 @@
 <!-- ============ SETTINGS MODAL ============ -->
 <div class="modal-backdrop hidden" id="settingsModal">
   <div class="modal">
-    <div class="modal-header"><h2>Ustawienia</h2><button class="modal-close" data-close="settingsModal">✕</button></div>
+    <div class="modal-header"><h2 data-i18n="settings.title">Ustawienia</h2><button class="modal-close" data-close="settingsModal">✕</button></div>
     <div class="modal-body" id="settingsBody"></div>
   </div>
+</div>
+
+<!-- ============ SCHEDULE EDITOR MODAL (device schedules + tariff rate schedules, section 3) ============ -->
+<div class="modal-backdrop hidden" id="scheduleModal">
+  <div class="modal wide">
+    <div class="modal-header"><h2 id="scheduleModalTitle">🕐 Harmonogram</h2><button class="modal-close" data-close="scheduleModal">✕</button></div>
+    <div class="modal-body" id="scheduleModalBody"></div>
+  </div>
+</div>
+
+<!-- ============ NEW SIMULATION WIZARD MODAL (section 29) ============ -->
+<div class="modal-backdrop hidden" id="newSimModal">
+  <div class="modal">
+    <div class="modal-header"><h2 data-i18n="newsim.title">Nowa symulacja</h2><button class="modal-close" data-close="newSimModal">✕</button></div>
+    <div class="modal-body" id="newSimModalBody"></div>
+  </div>
+</div>
+
+<!-- ============ PV INSTALL MODE BANNER (sections 14/15) ============ -->
+<div id="pvInstallBanner" class="pv-install-banner hidden">
+  <div class="pv-install-text">
+    <b>☀ <span data-i18n="pv.installMode">Instalacja PV</span></b>
+    <span id="pvInstallHint" data-i18n="pv.installHint"></span>
+  </div>
+  <div class="pv-install-stats" id="pvInstallStats"></div>
+  <button class="primary-btn" id="pvInstallFinishBtn" data-i18n="pv.finishInstall">Zakończ instalację</button>
 </div>
 
 <!-- ============ EDU MODAL ============ -->
@@ -312,11 +358,14 @@
 <script src="js/data/furniture.js"></script>
 <script src="js/data/solar.js"></script>
 <script src="js/data/battery.js"></script>
-<script src="js/energy/EnergyCalculator.js"></script>
+<script src="js/i18n/dictionary.js"></script>
+<script src="js/i18n/I18n.js"></script>
 <script src="js/energy/ScheduleManager.js"></script>
+<script src="js/energy/SunPosition.js"></script>
+<script src="js/energy/TariffManager.js"></script>
+<script src="js/energy/EnergyCalculator.js"></script>
 <script src="js/energy/SolarCalculator.js"></script>
-<script src="js/energy/WeatherEventManager.js"></script>
-<script src="js/energy/SimulationEngine.js"></script>
+<script src="js/energy/WeatherSystem.js"></script>
 <script src="js/scene/SceneManager.js"></script>
 <script src="js/scene/TextureFactory.js"></script>
 <script src="js/scene/RoomBuilder.js"></script>
@@ -324,10 +373,13 @@
 <script src="js/scene/ModelFactory.js"></script>
 <script src="js/scene/ObjectManager.js"></script>
 <script src="js/scene/TransformManager.js"></script>
+<script src="js/energy/SimulationEngine.js"></script>
 <script src="js/analytics/AnalyticsManager.js"></script>
 <script src="js/automation/AutomationManager.js"></script>
-<script src="js/project/ProjectManager.js"></script>
 <script src="js/pet/PetManager.js"></script>
+<script src="js/pet/QuestManager.js"></script>
+<script src="js/pet/AdvisorEngine.js"></script>
+<script src="js/project/ProjectManager.js"></script>
 <script src="js/ui/UIManager.js"></script>
 <script src="js/main.js"></script>
 </body>

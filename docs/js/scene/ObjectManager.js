@@ -6,6 +6,17 @@
  * world offset, so instance.position/rotation/scale stay simple
  * ROOM-LOCAL coordinates and moving a room (e.g. resizing an earlier
  * room shifts a later one) is just one group.position change.
+ *
+ * NEW: every solar panel instance carries a cached `pvOrientation`
+ * ({tiltDeg, azimuthDeg}) derived from its actual THREE.js world
+ * transform (so a panel that's been moved/rotated/tilted with the
+ * normal gizmo genuinely produces a different amount of power -
+ * section 15). It's recomputed here, in one place, any time a solar
+ * panel's transform is set programmatically (`applyTransform`); the
+ * other path - dragging the on-screen gizmo directly - calls the same
+ * `computePVOrientation()` from TransformManager right after reading
+ * the live group transform back into plain data.
+ *
  * Unity mapping: ObjectManager + per-room parent GameObject, each
  * instance a child GameObject holding a "DeviceView" component that
  * mirrors RuntimeState -> visuals.
@@ -97,6 +108,7 @@ class ObjectManager {
       stats: { energyYearKWh: 0 },
       runtime: { state: kind==='device' ? (def.idleState||'off') : (kind==='solar' ? 'generating' : (kind==='battery' ? 'idle' : null)), powerW: 0, continuousOnMinutes:0, standbyMinutes:0, automationOverride:null, pendingAutomation:null },
     };
+    if (kind==='solar'){ inst.installedAtAbsMin = null; this.computePVOrientation(inst); }
     this.instances.push(inst);
     this.onChange();
     return inst;
@@ -122,7 +134,7 @@ class ObjectManager {
     copy.rotation = { ...inst.rotation };
     copy.scale = { ...inst.scale };
     copy.customName = inst.customName;
-    if (inst.kind==='device'){ copy.schedule = { ...inst.schedule }; copy.connected = inst.connected; copy.manualOverride = inst.manualOverride; }
+    if (inst.kind==='device'){ copy.schedule = JSON.parse(JSON.stringify(inst.schedule)); copy.connected = inst.connected; copy.manualOverride = inst.manualOverride; }
     // note: solar panels auto-parent to the room's roof group inside addSolar (see getRoofGroup),
     // so the duplicate already lands on the correct roof without any extra reparenting here.
     this.applyTransform(copy.id, copy.position, copy.rotation, copy.scale);
@@ -134,11 +146,38 @@ class ObjectManager {
     if (position){ inst.position = {...position}; inst.group.position.set(position.x,position.y,position.z); }
     if (rotation){ inst.rotation = {...rotation}; inst.group.rotation.set(rotation.x,rotation.y,rotation.z); }
     if (scale){ inst.scale = {...scale}; inst.group.scale.set(scale.x,scale.y,scale.z); }
+    if (inst.kind==='solar') this.computePVOrientation(inst);
   }
 
   resetTransform(id){
     const inst = this.find(id); if (!inst) return;
     this.applyTransform(id, inst.position, {x:0,y:0,z:0}, {x:1,y:1,z:1});
+  }
+
+  /**
+   * Reads the panel's ACTUAL world orientation straight from the THREE.js
+   * scene graph (its own rotation + whatever roof/room group it's parented
+   * under) and caches it as plain {tiltDeg, azimuthDeg} on the instance.
+   * This is the single source of truth SolarCalculator uses for the
+   * incidence-angle physics - never duplicated/recomputed independently,
+   * so a panel dragged flat vs. propped up at a steep angle genuinely
+   * produces different numbers everywhere (tooltip, panel, charts, stats).
+   * tiltDeg: 0=flat facing straight up, 90=vertical. azimuthDeg: compass-
+   * style bearing of the panel's face, arbitrary-but-fixed 0..360 mapping
+   * (there's no in-scene "true north" - SolarCalculator just needs it to
+   * be internally consistent with SunPosition's own azimuth convention,
+   * which it is, since both are pure math with no THREE.js dependency).
+   */
+  computePVOrientation(inst){
+    if (inst.kind !== 'solar' || !inst.group) return;
+    inst.group.updateWorldMatrix(true, false);
+    const q = new THREE.Quaternion();
+    inst.group.getWorldQuaternion(q);
+    const normal = new THREE.Vector3(0,1,0).applyQuaternion(q).normalize();
+    const tiltDeg = THREE.MathUtils.radToDeg(Math.acos(Math.max(-1, Math.min(1, normal.y))));
+    let azimuthDeg = THREE.MathUtils.radToDeg(Math.atan2(normal.x, -normal.z));
+    if (azimuthDeg < 0) azimuthDeg += 360;
+    inst.pvOrientation = { tiltDeg, azimuthDeg };
   }
 
   setSchedule(id, schedule){

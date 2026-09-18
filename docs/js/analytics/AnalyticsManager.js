@@ -1,20 +1,35 @@
 /**
  * ANALYTICS MANAGER
- * Independent from the live simulation clock: statically integrates
- * each device's schedule-driven power profile (and every PV panel's
- * sun-driven output) over a full virtual week (1-minute resolution) to
- * produce deterministic, tariff-aware projections. Cheap enough
- * (~10k evaluations for 100 devices) to recompute on demand; cached
- * briefly since the UI polls it.
+ * Two complementary data sources, never mixed up as if they were the
+ * same thing (spec section 25's "one consistent model" - each number
+ * is clearly either an actual simulated measurement or a projection):
+ *
+ *  1) STATIC PROJECTION (original mechanic, kept) - statically
+ *     integrates every device's schedule-driven power profile (and
+ *     every PV panel's sun-driven output) over a representative
+ *     virtual week/day, tariff-aware. Used for "today so far" (before
+ *     enough of today has actually run) and for anything about the
+ *     future.
+ *  2) PLAYED HISTORY (new) - SimulationEngine.history is a day-by-day
+ *     ledger of what ACTUALLY happened while the sim was running.
+ *     Once there's enough of it, week/month/year views blend in real
+ *     numbers instead of pure projection, and are clearly labelled
+ *     "measured" vs. "estimated" in the UI.
+ *
  * Unity mapping: AnalyticsManager (pure C# service, no MonoBehaviour).
  */
 class AnalyticsManager {
-  constructor({ getInstances, getSolarInstances, getBatteryInstances, getSettings }){
+  constructor({ getInstances, getSolarInstances, getBatteryInstances, getSettings, getSim }){
     this.getInstances = getInstances;
     this.getSolarInstances = getSolarInstances || (()=>[]);
     this.getBatteryInstances = getBatteryInstances || (()=>[]);
-    this.getSettings = getSettings; // {pricePerKWh, currency, extraFeesPerMonth, co2Factor, tariffMode, priceDay, priceNight, nightStart, nightEnd, cloudFactor}
+    this.getSettings = getSettings; // energySettings: {tariffCode, tariffPrices, tariffSchedules, pvPriority, currency, extraFeesPerMonth, co2Factor, avgHouseholdKWhYear}
+    this.getSim = getSim || (()=>null); // SimulationEngine instance - optional, enables real-history features
   }
+
+  _refDate(){ const sim = this.getSim(); return sim ? sim.simDate : new Date(); }
+  _refDayOfYear(){ const sim = this.getSim(); return sim ? sim.dayOfYear : SunPosition.dayOfYear(new Date()); }
+  _refSeasonFactor(){ const sim = this.getSim(); const season = sim ? sim.season : SunPosition.seasonForDate(new Date()); return WeatherSystem.seasonalAverageFactor(season); }
 
   computeWeekProjection(){
     const now = Date.now();
@@ -29,37 +44,41 @@ class AnalyticsManager {
     const instances = this.getInstances();
     const panels = this.getSolarInstances();
     const s = this.getSettings();
+    const doy = this._refDayOfYear();
+    const skyFactor = this._refSeasonFactor();
     const perWeekdayTotal = new Array(7).fill(0);
     const perWeekdayGen = new Array(7).fill(0);
-    const perWeekdayCost = new Array(7).fill(0); // tariff-aware, net of generation
+    const perWeekdayCost = new Array(7).fill(0); // tariff-aware: self-consumption avoids the import rate, only true surplus is credited at the (separate, usually lower) export rate
     const perDeviceWeekly = {}; const perDeviceDaily = {};
     for (const inst of instances){ perDeviceDaily[inst.id] = new Array(7).fill(0); perDeviceWeekly[inst.id] = 0; }
 
     for (let day=0; day<7; day++){
       const dayBase = day*1440;
-      for (const inst of instances){
-        let dayKWh = 0;
-        for (let m=0; m<1440; m+=1){
+      const perDeviceThisDay = {};
+      let dayTotal = 0, dayGen = 0, dayCost = 0;
+      for (let m=0; m<1440; m++){
+        let minuteTotal = 0;
+        for (const inst of instances){
           const { powerW } = ScheduleManager.resolve(inst, dayBase+m);
-          dayKWh += EnergyCalculator.wattsMinutesToKWh(powerW,1);
-          const rate = EnergyCalculator.priceAt(m, s);
-          perWeekdayCost[day] += EnergyCalculator.wattsMinutesToKWh(powerW,1) * rate;
+          const kwh = EnergyCalculator.wattsMinutesToKWh(powerW,1);
+          perDeviceThisDay[inst.id] = (perDeviceThisDay[inst.id]||0) + kwh;
+          minuteTotal += powerW;
         }
-        perDeviceDaily[inst.id][day] = dayKWh;
-        perDeviceWeekly[inst.id] += dayKWh;
-        perWeekdayTotal[day] += dayKWh;
-      }
-      for (const p of panels){
-        let genKWh = 0;
-        for (let m=0; m<1440; m+=5){
-          const w = SolarCalculator.resolve(p, dayBase+m, s.cloudFactor);
-          const kwh = EnergyCalculator.wattsMinutesToKWh(w,5);
-          genKWh += kwh;
-          const rate = EnergyCalculator.priceAt(m, s);
-          perWeekdayCost[day] -= kwh * rate; // net metering credit at the same tariff rate
+        let minuteGen = 0;
+        for (const p of panels) minuteGen += SolarCalculator.resolve(p, dayBase+m, doy, skyFactor);
+        dayTotal += EnergyCalculator.wattsMinutesToKWh(minuteTotal,1);
+        dayGen += EnergyCalculator.wattsMinutesToKWh(minuteGen,1);
+        const netW = minuteTotal - minuteGen;
+        const netKw = netW/1000;
+        if (netW >= 0){
+          dayCost += netKw*(1/60) * EnergyCalculator.priceAt(dayBase+m, s);
+        } else {
+          const exportRate = s.exportPricePerKWh != null ? s.exportPricePerKWh : EnergyCalculator.priceAt(dayBase+m, s);
+          dayCost += netKw*(1/60) * exportRate; // negative net x rate = credit
         }
-        perWeekdayGen[day] += genKWh;
       }
+      for (const inst of instances){ perDeviceDaily[inst.id][day] = perDeviceThisDay[inst.id]||0; perDeviceWeekly[inst.id] += perDeviceThisDay[inst.id]||0; }
+      perWeekdayTotal[day] = dayTotal; perWeekdayGen[day] = dayGen; perWeekdayCost[day] = dayCost;
     }
     const weekTotal = perWeekdayTotal.reduce((a,b)=>a+b,0);
     const weekGen = perWeekdayGen.reduce((a,b)=>a+b,0);
@@ -75,19 +94,34 @@ class AnalyticsManager {
   computeHourlyShape(weekday){
     const instances = this.getInstances();
     const panels = this.getSolarInstances();
-    const s = this.getSettings();
+    const doy = this._refDayOfYear();
+    const skyFactor = this._refSeasonFactor();
     const hours = new Array(24).fill(0);
     const genHours = new Array(24).fill(0);
     for (let h=0; h<24; h++){
       for (let mm=0; mm<60; mm+=15){
         let sumW = 0, genW = 0;
         for (const inst of instances) sumW += ScheduleManager.resolve(inst, weekday*1440 + h*60 + mm).powerW;
-        for (const p of panels) genW += SolarCalculator.resolve(p, weekday*1440 + h*60 + mm, s.cloudFactor);
+        for (const p of panels) genW += SolarCalculator.resolve(p, weekday*1440 + h*60 + mm, doy, skyFactor);
         hours[h] += EnergyCalculator.wattsMinutesToKWh(sumW,15);
         genHours[h] += EnergyCalculator.wattsMinutesToKWh(genW,15);
       }
     }
     return { hours, genHours };
+  }
+
+  /** Average kWh/day a full set of currently-installed panels would generate on a representative day
+   *  of `dayOfYear`, under `skyFactor` sky conditions - used by the year breakdown (one call per month,
+   *  cheap) and by the PV install UI's per-panel preview. */
+  estimateDailySolarKWh(dayOfYear, skyFactor, panelsOverride){
+    const panels = panelsOverride || this.getSolarInstances();
+    let kwh = 0;
+    for (const p of panels){
+      for (let m=0; m<1440; m+=15){
+        kwh += EnergyCalculator.wattsMinutesToKWh(SolarCalculator.resolve(p, m, dayOfYear, skyFactor), 15);
+      }
+    }
+    return kwh;
   }
 
   projections(liveTodayKWh, liveTodayGenKWh, liveTodayCost){
@@ -115,15 +149,16 @@ class AnalyticsManager {
   ranking(){
     const instances = this.getInstances();
     const s = this.getSettings();
+    const price = EnergyCalculator.effectivePrice(s);
     const wk = this.computeWeekProjection();
     const rows = instances.map(inst=>{
       const dailyKWh = wk.perDeviceWeekly[inst.id]/7;
       const monthlyKWh = dailyKWh*30;
       return {
-        inst, name: inst.customName || inst.def.name,
+        inst, name: inst.customName || I18n.deviceName(inst.def),
         currentPowerW: inst.runtime.powerW||0,
         dailyKWh, monthlyKWh,
-        monthlyCost: EnergyCalculator.cost(monthlyKWh, s.pricePerKWh),
+        monthlyCost: EnergyCalculator.cost(monthlyKWh, price),
       };
     });
     const totalMonthly = rows.reduce((a,r)=>a+r.monthlyKWh,0) || 1;
@@ -132,17 +167,43 @@ class AnalyticsManager {
     return rows;
   }
 
+  /** Full drill-down for one device: today/yesterday/week/month/year/forecast, all derived from the
+   *  same schedule-resolution engine (+ real "today so far"/"yesterday" from the live sim when available). */
+  deviceAllRanges(instId){
+    const sim = this.getSim();
+    const instances = this.getInstances();
+    const inst = instances.find(i=>i.id===instId);
+    if (!inst) return null;
+    const wk = this.computeWeekProjection();
+    const dailyAvg = wk.perDeviceWeekly[inst.id]/7;
+    const today = sim ? (sim.todayKWhByDevice[inst.id]||0) : dailyAvg;
+    const yesterday = sim && sim.lastCompletedDay && sim.lastCompletedDay.byDevice ? (sim.lastCompletedDay.byDevice[inst.id]||0) : dailyAvg;
+    const s = this.getSettings();
+    const price = EnergyCalculator.effectivePrice(s);
+    return {
+      inst, name: inst.customName || I18n.deviceName(inst.def),
+      today, yesterday,
+      week: wk.perDeviceWeekly[inst.id],
+      month: dailyAvg*30, year: dailyAvg*365, yearForecast: dailyAvg*365,
+      costToday: today*price, costMonth: dailyAvg*30*price, costYear: dailyAvg*365*price,
+      pctOfTotal: (()=>{ const rows=this.ranking(); const r=rows.find(x=>x.inst.id===instId); return r?r.pct:0; })(),
+    };
+  }
+
   /** Solar ranking / summary per panel */
   solarSummary(){
     const panels = this.getSolarInstances();
     const s = this.getSettings();
+    const price = EnergyCalculator.effectivePrice(s);
     const wk = this.computeWeekProjection();
     const totalPeakW = panels.reduce((a,p)=>a+p.def.peakPowerW,0);
     const currentGenW = panels.reduce((a,p)=>a - Math.min(0,p.runtime.powerW||0),0);
+    const avgAimQuality = panels.length ? panels.reduce((a,p)=>a+SolarCalculator.aimQuality(p.pvOrientation||SolarCalculator.DEFAULT_ORIENTATION, this._refDayOfYear()),0)/panels.length : 0;
     return {
       count: panels.length, totalPeakW, currentGenW,
       todayGenKWh: wk.avgDailyGen, monthGenKWh: wk.avgDailyGen*30, yearGenKWh: wk.avgDailyGen*365,
-      yearCredit: EnergyCalculator.cost(wk.avgDailyGen*365, s.pricePerKWh),
+      yearCredit: EnergyCalculator.cost(wk.avgDailyGen*365, price),
+      avgAimQuality,
     };
   }
 
@@ -164,14 +225,13 @@ class AnalyticsManager {
     };
   }
 
-  /** Compares the house's projected annual consumption/cost to a reference "average Polish
-   *  household" figure (editable in Settings - a stated estimate, never presented as an official
-   *  statistic). Positive kWhDiff/costDiff = user uses/pays MORE than the reference. */
+  /** Compares the house's projected annual consumption/cost to a reference "average household"
+   *  figure (editable in Settings - a stated estimate, never presented as an official statistic). */
   householdComparison(liveTodayKWh){
     const s = this.getSettings();
     const proj = this.projections(liveTodayKWh);
     const refKWh = s.avgHouseholdKWhYear || 2900;
-    const refCost = refKWh * (s.tariffMode==='dual' ? (s.priceDay+s.priceNight)/2 : s.pricePerKWh);
+    const refCost = refKWh * EnergyCalculator.effectivePrice(s);
     const userYearKWh = Math.max(0, proj.year - proj.yearGen);
     const kWhDiff = userYearKWh - refKWh;
     const costDiff = proj.yearCost - refCost;
@@ -183,12 +243,131 @@ class AnalyticsManager {
     };
   }
 
+  /** Section 13: money genuinely saved thanks to PV+battery - today/month/year (projected) plus the
+   *  session's real lifetime total (SimulationEngine.totalSavedPLN, accumulated minute-by-minute from
+   *  actual baseline-vs-actual cost, never a fabricated number). */
+  savingsAnalysis(){
+    const sim = this.getSim();
+    const s = this.getSettings();
+    const proj = this.projections(sim?sim.todayKWh:null, sim?sim.todaySolarKWh:null, sim?sim.todayCost:null);
+    const price = EnergyCalculator.effectivePrice(s);
+    const withoutPVMonth = proj.month * price + s.extraFeesPerMonth;
+    const withoutPVYear = proj.year * price + s.extraFeesPerMonth*12;
+    const withPVMonth = proj.monthCost, withPVYear = proj.yearCost;
+    const reductionPct = withoutPVYear>0 ? Math.max(0, (1 - withPVYear/withoutPVYear)*100) : 0;
+    return {
+      withoutPVMonth, withoutPVYear, withPVMonth, withPVYear,
+      savingMonth: Math.max(0, withoutPVMonth-withPVMonth), savingYear: Math.max(0, withoutPVYear-withPVYear),
+      reductionPct,
+      lifetimeSavingPLN: sim ? sim.totalSavedPLN : 0,
+      lifetimeImportKWh: sim ? sim.totalImportKWh : 0, lifetimeExportKWh: sim ? sim.totalExportKWh : 0,
+    };
+  }
+
+  /** Section 20/4: where today's consumption is going, by device category and by room -
+   *  straight from SimulationEngine's live per-minute accumulators, not re-derived/guessed. */
+  breakdownToday(sim){
+    sim = sim || this.getSim();
+    if (!sim) return { byCategory:[], byRoom:[] };
+    const total = sim.todayKWh || 1;
+    const byCategory = Object.entries(sim.todayKWhByCategory||{}).map(([cat,kwh])=>({ id:cat, label:I18n.category(cat), kWh:kwh, pct:kwh/total*100 })).sort((a,b)=>b.kWh-a.kWh);
+    const byRoom = Object.entries(sim.todayKWhByRoom||{}).map(([roomId,kwh])=>({ id:roomId, kWh:kwh, pct:kwh/total*100 })).sort((a,b)=>b.kWh-a.kWh);
+    return { byCategory, byRoom };
+  }
+
+  /** Section 8/9: 12-month table for the simulated calendar year, blending REAL played days
+   *  (SimulationEngine.history + the current in-progress day) with a season-aware PROJECTION
+   *  for any days of a month that haven't been simulated yet. Each month is flagged isReal/
+   *  isPartial/isProjected so the UI can visibly distinguish "measured" from "estimated". */
+  yearBreakdown(){
+    const sim = this.getSim();
+    const s = this.getSettings();
+    const wk = this.computeWeekProjection();
+    const price = EnergyCalculator.effectivePrice(s);
+    const refDate = this._refDate();
+    const year = refDate.getFullYear();
+    const history = sim ? sim.history : [];
+    const months = [];
+    for (let m=0; m<12; m++){
+      const daysInMonth = new Date(year, m+1, 0).getDate();
+      const realEntries = history.filter(e=>{ const d=new Date(e.dateISO+'T00:00:00'); return d.getFullYear()===year && d.getMonth()===m; });
+      let realConsumed=0, realSolar=0, realImport=0, realExport=0, realCost=0;
+      for (const e of realEntries){ realConsumed+=e.consumedKWh; realSolar+=e.solarKWh; realImport+=e.importKWh||0; realExport+=e.exportKWh||0; realCost+=e.cost; }
+      let realDays = realEntries.length;
+      const isCurrentMonth = sim && refDate.getFullYear()===year && refDate.getMonth()===m;
+      if (isCurrentMonth){
+        realConsumed += sim.todayKWh; realSolar += sim.todaySolarKWh; realImport += sim.todayImportKWh; realExport += sim.todayExportKWh; realCost += sim.todayCost;
+        realDays += sim.minuteOfDay/1440; // partial-day credit
+      }
+      const remainingDays = Math.max(0, daysInMonth - realDays);
+      const season = SunPosition.seasonForDate(new Date(year, m, 15));
+      const seasonFactor = WeatherSystem.seasonalAverageFactor(season);
+      const repDoy = SunPosition.dayOfYear(new Date(year, m, 15));
+      const projSolarPerDay = this.estimateDailySolarKWh(repDoy, seasonFactor);
+      const projConsumedPerDay = wk.avgDaily;
+      const netPerDay = projConsumedPerDay - projSolarPerDay;
+      const exportPrice = s.exportPricePerKWh != null ? s.exportPricePerKWh : price;
+      const projCostPerDay = netPerDay >= 0 ? netPerDay*price : netPerDay*exportPrice;
+      const consumedKWh = realConsumed + projConsumedPerDay*remainingDays;
+      const solarKWh = realSolar + projSolarPerDay*remainingDays;
+      const importKWh = realImport + Math.max(0,projConsumedPerDay-projSolarPerDay)*remainingDays;
+      const exportKWh = realExport + Math.max(0,projSolarPerDay-projConsumedPerDay)*remainingDays;
+      const cost = realCost + projCostPerDay*remainingDays;
+      months.push({
+        monthIdx:m, label:I18n.monthName(m), season,
+        consumedKWh, solarKWh, importKWh, exportKWh, cost, savings: Math.max(0, consumedKWh*price - cost),
+        isReal: remainingDays < 0.02 && realDays>0, isPartial: remainingDays>=0.02 && realDays>0.02, isProjected: realDays<=0.02,
+      });
+    }
+    const totals = months.reduce((acc,mo)=>({
+      consumedKWh: acc.consumedKWh+mo.consumedKWh, solarKWh: acc.solarKWh+mo.solarKWh,
+      importKWh: acc.importKWh+mo.importKWh, exportKWh: acc.exportKWh+mo.exportKWh,
+      cost: acc.cost+mo.cost, savings: acc.savings+mo.savings,
+    }), { consumedKWh:0, solarKWh:0, importKWh:0, exportKWh:0, cost:0, savings:0 });
+    return { year, months, totals };
+  }
+
+  /** Section 23: real period-over-period comparison, built only from genuinely simulated days
+   *  (SimulationEngine.history) - falls back gracefully (marks `insufficientData`) if the sim
+   *  hasn't been played long enough yet for a full previous period to exist. */
+  comparePeriods(rangeType){
+    const sim = this.getSim();
+    if (!sim) return { insufficientData:true };
+    const s = this.getSettings();
+    const price = EnergyCalculator.effectivePrice(s);
+    const hist = sim.history;
+    const spanDays = rangeType==='week' ? 7 : 30;
+    const currentEntries = hist.slice(-spanDays);
+    const previousEntries = hist.slice(-spanDays*2, -spanDays);
+    if (currentEntries.length < 1) return { insufficientData:true, needDays: spanDays };
+    const sum = (arr,key)=>arr.reduce((a,e)=>a+(e[key]||0),0);
+    const cur = {
+      consumedKWh: sum(currentEntries,'consumedKWh') + sim.todayKWh,
+      solarKWh: sum(currentEntries,'solarKWh') + sim.todaySolarKWh,
+      cost: sum(currentEntries,'cost') + sim.todayCost,
+    };
+    const prev = previousEntries.length ? {
+      consumedKWh: sum(previousEntries,'consumedKWh'),
+      solarKWh: sum(previousEntries,'solarKWh'),
+      cost: sum(previousEntries,'cost'),
+    } : null;
+    const pctChange = (a,b)=> b ? ((a-b)/Math.abs(b)*100) : null;
+    return {
+      insufficientData:false, rangeType, hasPrevious: !!prev,
+      current: cur, previous: prev,
+      changeConsumedPct: prev ? pctChange(cur.consumedKWh, prev.consumedKWh) : null,
+      changeCostPct: prev ? pctChange(cur.cost, prev.cost) : null,
+      changeSolarPct: prev ? pctChange(cur.solarKWh, prev.solarKWh) : null,
+      changeCostAbs: prev ? (cur.cost-prev.cost) : null,
+    };
+  }
+
   /** Energy Score 0-100 + letter class + explanation */
   energyScore(){
     const rows = this.ranking();
     const instances = this.getInstances();
     const panels = this.getSolarInstances();
-    if (!instances.length) return { score:100, grade:'A+', biggestProblem:'Brak urządzeń.', biggestOpportunity:'Dodaj urządzenia, aby zobaczyć analizę.' };
+    if (!instances.length) return { score:100, grade:'A+', biggestProblem:I18n.t('score.noDevices'), biggestOpportunity:I18n.t('score.addDevices') };
     let standbyPenalty = 0, inefficiencyPenalty = 0;
     let worst = null, worstStandby = 0;
     for (const inst of instances){
@@ -204,10 +383,10 @@ class AnalyticsManager {
     let score = 100 - standbyPenalty - inefficiencyPenalty - concentrationPenalty + solarBonus;
     score = Math.max(5, Math.min(100, Math.round(score)));
     const grade = score>=95?'A+':score>=85?'A':score>=75?'B':score>=65?'C':score>=50?'D':score>=35?'E':score>=20?'F':'G';
-    const biggestProblem = topRow ? `${topRow.name} odpowiada za ${topRow.pct.toFixed(0)}% miesięcznego zużycia.`
-                                   : 'Brak istotnych problemów.';
-    const biggestOpportunity = worst ? `Automatyczne wyłączanie "${(worst.customName||worst.def.name)}" ze standby (${worstStandby}W) mogłoby ograniczyć zużycie jałowe.`
-                                      : (panels.length ? 'Rozważ dodanie kolejnych paneli PV, aby zwiększyć autokonsumpcję.' : 'Rozważ automatyzacje wyłączające urządzenia w nocy.');
+    const biggestProblem = topRow ? I18n.t('score.biggestProblem', { name: topRow.name, pct: topRow.pct.toFixed(0) })
+                                   : I18n.t('score.noProblems');
+    const biggestOpportunity = worst ? I18n.t('score.biggestOpportunity', { name: (worst.customName||I18n.deviceName(worst.def)), watts: worstStandby })
+                                      : (panels.length ? I18n.t('score.addMorePV') : I18n.t('score.automateNight'));
     return { score, grade, biggestProblem, biggestOpportunity };
   }
 
@@ -219,19 +398,19 @@ class AnalyticsManager {
     for (const inst of instances){
       const runsForMin = inst.runtime.continuousOnMinutes||0;
       if (inst.runtime.state && inst.runtime.state!=='off' && inst.runtime.state!=='standby' && runsForMin >= 6*60){
-        out.push({ level:'warning', text:`${inst.customName||inst.def.name} działa od ${Math.floor(runsForMin/60)} godzin.` });
+        out.push({ level:'warning', text:I18n.t('alert.runningHours', { name: inst.customName||I18n.deviceName(inst.def), hours: Math.floor(runsForMin/60) }) });
       }
       if (inst.runtime.state === 'standby' && (inst.runtime.standbyMinutes||0) >= 16*60){
-        out.push({ level:'info', text:`${inst.customName||inst.def.name} pozostaje w standby przez ${Math.floor((inst.runtime.standbyMinutes)/60)} godzin.` });
+        out.push({ level:'info', text:I18n.t('alert.standbyHours', { name: inst.customName||I18n.deviceName(inst.def), hours: Math.floor((inst.runtime.standbyMinutes)/60) }) });
       }
     }
     if (rows.length && rows[0].pct > 25){
-      out.push({ level:'info', text:`${rows[0].name} odpowiada za ${rows[0].pct.toFixed(0)}% dzisiejszego zużycia.` });
+      out.push({ level:'info', text:I18n.t('alert.topShare', { name: rows[0].name, pct: rows[0].pct.toFixed(0) }) });
     }
     const washer = instances.find(i=>i.def.id==='washer');
-    if (washer) out.push({ level:'tip', text:'Pralka zużywa najwięcej energii podczas podgrzewania wody.' });
+    if (washer) out.push({ level:'tip', text:I18n.t('alert.washerTip') });
     if (sim && this.getSolarInstances().length && sim.currentGenW > sim.currentPowerW){
-      out.push({ level:'tip', text:`Panele PV pokrywają teraz 100% zużycia i eksportują ${EnergyCalculator.fmtW(sim.currentGenW-sim.currentPowerW)} nadwyżki.` });
+      out.push({ level:'tip', text:I18n.t('alert.pvSurplus', { watts: EnergyCalculator.fmtW(sim.currentGenW-sim.currentPowerW) }) });
     }
     return out.slice(0,6);
   }
@@ -266,10 +445,11 @@ class AnalyticsManager {
     const a = rows.find(r=>r.inst.id===instIdA), b = rows.find(r=>r.inst.id===instIdB);
     if (!a||!b) return null;
     const s = this.getSettings();
+    const price = EnergyCalculator.effectivePrice(s);
     return { a, b,
       yearlyA: a.monthlyKWh*12, yearlyB: b.monthlyKWh*12,
-      yearlyCostA: EnergyCalculator.cost(a.monthlyKWh*12, s.pricePerKWh),
-      yearlyCostB: EnergyCalculator.cost(b.monthlyKWh*12, s.pricePerKWh),
+      yearlyCostA: EnergyCalculator.cost(a.monthlyKWh*12, price),
+      yearlyCostB: EnergyCalculator.cost(b.monthlyKWh*12, price),
     };
   }
 }

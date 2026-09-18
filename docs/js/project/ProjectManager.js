@@ -5,15 +5,27 @@
  * automation rules) to/from a plain JSON object. No THREE.js objects
  * are ever stored - only plain data, which is exactly the shape a
  * Unity importer would need too.
+ *
+ * Two related but separate payloads (section 28):
+ *  - serialize() - the editable PROJECT (house/devices/schedules/
+ *    settings). Used for undo/redo snapshots too, so it deliberately
+ *    stays small/fast and does NOT include simulation clock/history -
+ *    undo should rewind an edit, never rewind the simulated calendar.
+ *  - serializeFull() = serialize() + SimulationEngine.serializeProgress()
+ *    (elapsed simulated time, lifetime totals, day-by-day history).
+ *    Used only by saveLocal()/exportFile(), so closing and reopening
+ *    the browser resumes the simulation's timeline instead of
+ *    resetting the clock to 08:00 Day 0 every time.
  */
 class ProjectManager {
-  constructor({ objectManager, getHouseState, setHouseState, getEnergySettings, setEnergySettings, automationManager, rebuildHouse, onLog }){
+  constructor({ objectManager, getHouseState, setHouseState, getEnergySettings, setEnergySettings, automationManager, simulationEngine, rebuildHouse, onLog }){
     this.om = objectManager;
     this.getHouseState = getHouseState;
     this.setHouseState = setHouseState;
     this.getEnergySettings = getEnergySettings;
     this.setEnergySettings = setEnergySettings;
     this.automation = automationManager;
+    this.sim = simulationEngine || null;
     this.rebuildHouse = rebuildHouse;
     this.onLog = onLog || (()=>{});
     this.projectName = 'Moj Dom';
@@ -23,7 +35,7 @@ class ProjectManager {
 
   serialize(){
     return {
-      version: 2,
+      version: 3,
       projectName: this.projectName,
       house: this.getHouseState(),
       energy: this.getEnergySettings(),
@@ -36,6 +48,12 @@ class ProjectManager {
       })),
     };
   }
+  /** Full save payload - project + simulation progress (section 28). */
+  serializeFull(){
+    const out = this.serialize();
+    if (this.sim) out.simProgress = this.sim.serializeProgress();
+    return out;
+  }
 
   deserialize(json){
     if (!json || typeof json !== 'object') throw new Error('Nieprawidłowy plik projektu');
@@ -43,7 +61,7 @@ class ProjectManager {
     const house = json.house && Array.isArray(json.house.rooms) ? json.house : defaultHouseState();
     this.setHouseState(house);
     this.rebuildHouse();
-    this.setEnergySettings({ ...DEFAULT_ENERGY_SETTINGS, ...(json.energy||{}) });
+    this.setEnergySettings(migrateEnergySettings(json.energy));
     this.om.clear();
     this.automation.rules = Array.isArray(json.automationRules) ? json.automationRules : [];
     if (Array.isArray(json.objects)){
@@ -64,43 +82,47 @@ class ProjectManager {
         } catch(e){ console.warn('Skipping corrupt object entry', e); }
       }
     }
+    if (this.sim){
+      if (json.simProgress) this.sim.deserializeProgress(json.simProgress);
+      else this.sim.resetProgress(); // a plain undo/redo snapshot (no simProgress) never touches the clock; only an explicit "no progress at all" load resets it
+    }
   }
 
   saveLocal(){
     try {
-      localStorage.setItem('energyroom3d_project', JSON.stringify(this.serialize()));
-      this.onLog('Projekt zapisany lokalnie.');
+      localStorage.setItem('energyroom3d_project', JSON.stringify(this.serializeFull()));
+      this.onLog(I18n.t('log.projectSaved'));
       return true;
-    } catch(e){ console.error(e); this.onLog('Błąd zapisu projektu.'); return false; }
+    } catch(e){ console.error(e); this.onLog(I18n.t('log.projectSaveError')); return false; }
   }
   loadLocal(){
     try {
       const raw = localStorage.getItem('energyroom3d_project');
-      if (!raw) { this.onLog('Brak zapisanego projektu.'); return false; }
+      if (!raw) { this.onLog(I18n.t('log.noSavedProject')); return false; }
       this.deserialize(JSON.parse(raw));
-      this.onLog('Projekt wczytany.');
+      this.onLog(I18n.t('log.projectLoaded'));
       return true;
-    } catch(e){ console.error(e); this.onLog('Błąd wczytywania projektu (uszkodzony JSON).'); return false; }
+    } catch(e){ console.error(e); this.onLog(I18n.t('log.projectLoadError')); return false; }
   }
   hasLocal(){ return !!localStorage.getItem('energyroom3d_project'); }
 
   exportFile(){
-    const data = JSON.stringify(this.serialize(), null, 2);
+    const data = JSON.stringify(this.serializeFull(), null, 2);
     const blob = new Blob([data], { type:'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'energyroom_project.json';
+    a.href = url; a.download = (this.projectName||'energyroom_project').replace(/[^a-z0-9_\-]+/gi,'_') + '.json';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    this.onLog('Projekt wyeksportowany do pliku.');
+    this.onLog(I18n.t('log.projectExported'));
   }
   importFile(file, cb){
     const reader = new FileReader();
     reader.onload = () => {
-      try { this.deserialize(JSON.parse(reader.result)); this.onLog('Projekt zaimportowany.'); cb && cb(true); }
-      catch(e){ console.error(e); this.onLog('Błąd importu: nieprawidłowy plik JSON.'); cb && cb(false); }
+      try { this.deserialize(JSON.parse(reader.result)); this.onLog(I18n.t('log.projectImported')); cb && cb(true); }
+      catch(e){ console.error(e); this.onLog(I18n.t('log.projectImportError')); cb && cb(false); }
     };
-    reader.onerror = () => { this.onLog('Nie udało się odczytać pliku.'); cb && cb(false); };
+    reader.onerror = () => { this.onLog(I18n.t('log.fileReadError')); cb && cb(false); };
     reader.readAsText(file);
   }
 
@@ -108,14 +130,37 @@ class ProjectManager {
     this.projectName = 'Nowy Dom';
     this.setHouseState(defaultHouseState());
     this.rebuildHouse();
-    this.setEnergySettings({ ...DEFAULT_ENERGY_SETTINGS });
+    this.setEnergySettings(freshEnergySettings());
     this.om.clear();
     this.automation.rules = [];
     this.history=[]; this.future=[];
-    this.onLog('Utworzono nowy projekt.');
+    if (this.sim) this.sim.resetProgress();
+    this.onLog(I18n.t('log.newProjectCreated'));
   }
 
-  // ---------------- UNDO / REDO (snapshot based) ----------------
+  /** Section 29: the "New Simulation" wizard - a fully blank project (no PV, section 14) with the
+   *  chosen name/tariff/start date. Populating starter furniture (if any) is left to the caller
+   *  (UIManager), which knows about the demo-house builder functions - this stays focused on state. */
+  startNewSimulation({ projectName, tariffCode, startDateISO } = {}){
+    this.newProject();
+    if (projectName && projectName.trim()) this.projectName = projectName.trim().slice(0,40);
+    const s = this.getEnergySettings();
+    if (tariffCode && TariffManager.CODES.includes(tariffCode)) s.tariffCode = tariffCode;
+    s.startDateISO = startDateISO || new Date().toISOString();
+    this.setEnergySettings(s);
+    if (this.sim) this.sim._syncCalendarEpoch(); // re-anchor to the just-chosen start date (newProject()'s resetProgress ran before this was known)
+  }
+
+  /** Section 28's "Resetuj symulację" with confirmation - the confirmation dialog itself lives in
+   *  UIManager; by the time this is called the user has already confirmed. */
+  resetSimulation(){
+    this.newProject();
+    try{ localStorage.removeItem('energyroom3d_project'); }catch(e){}
+    this.pushHistory();
+    this.onLog(I18n.t('log.simulationReset'));
+  }
+
+  // ---------------- UNDO / REDO (snapshot based - project state only, never simulation progress) ----------------
   pushHistory(){
     if (this._suspend) return;
     this.history.push(JSON.stringify(this.serialize()));
@@ -123,23 +168,23 @@ class ProjectManager {
     this.future = [];
   }
   undo(){
-    if (!this.history.length) { this.onLog('Nic do cofnięcia.'); return; }
+    if (!this.history.length) { this.onLog(I18n.t('log.nothingToUndo')); return; }
     const current = JSON.stringify(this.serialize());
     const prev = this.history.pop();
     this.future.push(current);
     this._suspend = true;
     this.deserialize(JSON.parse(prev));
     this._suspend = false;
-    this.onLog('Cofnięto (Ctrl+Z).');
+    this.onLog(I18n.t('log.undone'));
   }
   redo(){
-    if (!this.future.length) { this.onLog('Nic do ponowienia.'); return; }
+    if (!this.future.length) { this.onLog(I18n.t('log.nothingToRedo')); return; }
     const next = this.future.pop();
     this.history.push(JSON.stringify(this.serialize()));
     this._suspend = true;
     this.deserialize(JSON.parse(next));
     this._suspend = false;
-    this.onLog('Ponowiono (Ctrl+Y).');
+    this.onLog(I18n.t('log.redone'));
   }
 }
 
@@ -177,9 +222,53 @@ function defaultHouseState(){
     wallVisibility: 1,
   };
 }
-const DEFAULT_ENERGY_SETTINGS = {
-  pricePerKWh:1.00, currency:'PLN', extraFeesPerMonth:0, co2Factor:0.65,
-  tariffMode:'flat', priceDay:1.10, priceNight:0.62, nightStart:'22:00', nightEnd:'06:00',
-  cloudFactor:0.15,
-  avgHouseholdKWhYear:2900, // reference only - editable in Settings, not an official statistic
-};
+
+/** Builds a brand-new {code: {rate:price}} / {code: richSchedule} pair for every tariff, so
+ *  switching tariffs back and forth in Settings never loses a tariff's own customized hours/prices
+ *  within one project (section 2: "taryfa powinna posiadać własny system konfiguracji godzin"). */
+function freshAllTariffMaps(){
+  const prices = {}, schedules = {};
+  for (const code of TariffManager.CODES){
+    const cfg = TariffManager.freshConfig(code);
+    prices[code] = cfg.prices;
+    schedules[code] = cfg.schedule;
+  }
+  return { prices, schedules };
+}
+function freshEnergySettings(){
+  const { prices, schedules } = freshAllTariffMaps();
+  return {
+    currency:'PLN', extraFeesPerMonth:0, co2Factor:0.65,
+    tariffCode:'G11', tariffPrices:prices, tariffSchedules:schedules,
+    exportPricePerKWh: 0.35, pvPriority:'home_first',
+    avgHouseholdKWhYear:2900,
+    startDateISO: new Date().toISOString(),
+  };
+}
+const DEFAULT_ENERGY_SETTINGS = freshEnergySettings();
+
+/** Upgrades a saved/legacy energySettings object into the current tariff-based shape.
+ *  Old projects only ever had {pricePerKWh, tariffMode, priceDay, priceNight, nightStart,
+ *  nightEnd, cloudFactor} - none of that is thrown away conceptually, it's mapped onto the
+ *  closest new tariff (flat -> G11, dual -> G12) so an old save keeps behaving the same way
+ *  on first load, fully editable from there via the new tariff/schedule UI. */
+function migrateEnergySettings(raw){
+  const base = freshEnergySettings();
+  if (!raw || typeof raw !== 'object') return base;
+  const merged = { ...base, ...raw };
+  merged.tariffPrices = { ...base.tariffPrices, ...(raw.tariffPrices||{}) };
+  merged.tariffSchedules = { ...base.tariffSchedules, ...(raw.tariffSchedules||{}) };
+  if (!raw.tariffCode){
+    if (raw.tariffMode === 'dual'){
+      merged.tariffCode = 'G12';
+      merged.tariffPrices.G12 = { day: raw.priceDay ?? base.tariffPrices.G12.day, night: raw.priceNight ?? base.tariffPrices.G12.night };
+    } else {
+      merged.tariffCode = 'G11';
+      merged.tariffPrices.G11 = { flat: raw.pricePerKWh ?? base.tariffPrices.G11.flat };
+    }
+  }
+  if (!raw.startDateISO) merged.startDateISO = base.startDateISO;
+  if (!raw.pvPriority) merged.pvPriority = 'home_first';
+  if (raw.exportPricePerKWh == null) merged.exportPricePerKWh = base.exportPricePerKWh;
+  return merged;
+}

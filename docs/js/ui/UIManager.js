@@ -18,6 +18,8 @@ class UIManager {
     this.charts = {};
     this.achievements = new Set();
     this.scenarios = { A: null, B: null };
+    this.pvInstallMode = false;
+    this.statsRange = 'today'; // 'today' | 'week' | 'month' | 'year' - dashboard range selector (section 8)
 
     this._bindTopbar();
     this._bindRoomTabs();
@@ -33,6 +35,9 @@ class UIManager {
     this._bindTutorial();
     this._bindModalGeneric();
     this._bindPetWidget();
+    this._bindPvInstallMode();
+    this._bindScheduleModal();
+    this._bindNewSimModal();
 
     this.transformManager.onSelect = (inst)=>this.renderProperties(inst);
     this.transformManager.onHover = (inst,e)=>this.renderTooltip(inst,e);
@@ -41,26 +46,40 @@ class UIManager {
     this.objectManager.onChange = ()=>{ this.analyticsManager.invalidateCache(); };
 
     this.simulationEngine.onLog = (msg)=> this.log(msg);
-    this.simulationEngine.onDayRollover = ()=>{ this._checkAchievements(); };
+    this.simulationEngine.onDayRollover = ({ entry })=>{
+      this._checkAchievements();
+      if (entry){
+        this.petManager.awardDailyOutcome(entry, this.simulationEngine, entry.dayIndex);
+        this.questManager.checkDaily(entry, entry.dayIndex, this._questCtx());
+      }
+    };
     this.automationManager.onLog = (msg)=> this.log(msg);
     this.projectManager.onLog = (msg)=> this.log(msg);
     this.weatherManager.onLog = (msg)=> this.log(msg);
     this.weatherManager.onEventChange = (ev)=>{
-      this._renderWeatherBadge(ev);
-      if (ev) this.toast(`${ev.icon} ${ev.name} — ${ev.desc}`);
+      this._renderWeatherBadge();
+      if (ev) this.toast(`${ev.icon} ${I18n.t(ev.nameKey)} — ${I18n.t('weather.effectNote')}`);
     };
+    this.weatherManager.onConditionChange = ()=> this._renderWeatherBadge();
     this.petManager.onLog = (msg)=> this.log(msg);
     this.petManager.onChange = ()=> this._renderPet();
     this.petManager.onLevelUp = (stage)=>{
-      this.toast(`🐾 ${this.petManager.name} awansował na poziom ${this.petManager.level}: ${stage.name}!`, true);
+      this.toast(`🐾 ${this.petManager.name} ${I18n.t('pet.leveledUp', { level: this.petManager.level, stage: stage.name })}`, true);
       this._playPetAnim('burst');
       this._renderPet();
     };
+    this.questManager.onLog = (msg)=> this.log(msg);
+    this.questManager.onComplete = (q)=>{
+      this.petManager.awardQuestComplete(q.xp);
+      this.toast(`🎯 ${I18n.t(q.titleKey)} (+${q.xp} XP)`, true);
+      this._renderPet();
+    };
+    I18n.onChange(()=> this._onLanguageChange());
 
     this.renderRoomTabs();
     this.renderCategoryTabs();
     this.renderAssetGrid();
-    this._renderWeatherBadge(this.weatherManager.active);
+    this._renderWeatherBadge();
     this.updateModeUI();
     this.sceneManager.onFrame(()=>this._frameTick());
     setInterval(()=>this._slowTick(), 2000);
@@ -173,8 +192,8 @@ class UIManager {
     const wrap = document.getElementById('categoryTabs');
     wrap.innerHTML = '';
     const activeRoom = this.getActiveRoom();
-    const cats = [...DEVICE_CATEGORIES, { id:'furniture', label:'Meble' }];
-    if (activeRoom && activeRoom.type==='garage') cats.push({ id:'solar', label:'Energia' });
+    const cats = [...DEVICE_CATEGORIES.map(c=>({id:c.id, label:I18n.category(c.id)})), { id:'furniture', label:I18n.t('category.furniture') }];
+    if (activeRoom && activeRoom.type==='garage') cats.push({ id:'solar', label:I18n.t('category.solar') });
     if (!cats.find(c=>c.id===this.currentCategory)) this.currentCategory = cats[0].id;
     for (const c of cats){
       const b = document.createElement('button');
@@ -216,14 +235,14 @@ class UIManager {
       for (const def of SOLAR_DEFINITIONS){
         const card = document.createElement('div');
         card.className='asset-card';
-        card.innerHTML = `<div class="asset-icon">${ICONS.solarpanel}</div><div class="asset-name">${def.name}</div><div class="asset-power" style="color:var(--accent-good)">+${def.peakPowerW}W szczyt</div>`;
+        card.innerHTML = `<div class="asset-icon">${ICONS.solarpanel}</div><div class="asset-name">${I18n.deviceName(def)}</div><div class="asset-power" style="color:var(--accent-good)">+${def.peakPowerW}W ${I18n.lang==='pl'?'szczyt':'peak'}</div>`;
         card.addEventListener('click', ()=>this._placeSolarPanel(def.id));
         grid.appendChild(card);
       }
       for (const def of BATTERY_DEFINITIONS){
         const card = document.createElement('div');
         card.className='asset-card';
-        card.innerHTML = `<div class="asset-icon">🔋</div><div class="asset-name">${def.name}</div><div class="asset-power" style="color:var(--accent-data)">${def.capacityKWh} kWh</div>`;
+        card.innerHTML = `<div class="asset-icon">🔋</div><div class="asset-name">${I18n.deviceName(def)}</div><div class="asset-power" style="color:var(--accent-data)">${def.capacityKWh} kWh</div>`;
         card.addEventListener('click', ()=>this._placeBattery(def.id));
         grid.appendChild(card);
       }
@@ -234,13 +253,13 @@ class UIManager {
       const roomType = room ? room.type : null;
       const list = FURNITURE_DEFINITIONS.filter(f=>!f.onlyIn || f.onlyIn.includes(roomType));
       for (const def of list){
-        grid.appendChild(this._assetCard(def.id, def.name, ICONS[def.modelType]||'▫', null, true));
+        grid.appendChild(this._assetCard(def.id, I18n.deviceName(def), ICONS[def.modelType]||'▫', null, true));
       }
       return;
     }
     const defs = DEVICE_DEFINITIONS.filter(d=>d.category===this.currentCategory);
     for (const def of defs){
-      grid.appendChild(this._assetCard(def.id, def.name, ICONS[def.modelType]||'▫', def.ratedPowerW, false));
+      grid.appendChild(this._assetCard(def.id, I18n.deviceName(def), ICONS[def.modelType]||'▫', def.ratedPowerW, false));
     }
   }
 
@@ -278,6 +297,10 @@ class UIManager {
     this.transformManager.select(inst.id);
     this.projectManager.pushHistory();
     this.log(`Zamontowano panel PV na dachu: ${room.name}`);
+    const totalPanels = this.objectManager.getSolar().length;
+    this.petManager.awardPVInstalled(totalPanels);
+    this.questManager.checkMilestones(this._questCtx());
+    if (this.pvInstallMode) this._refreshPvInstallBanner();
     if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open');
   }
 
@@ -289,7 +312,8 @@ class UIManager {
     if (!inst) return;
     this.transformManager.select(inst.id);
     this.projectManager.pushHistory();
-    this.log(`Dodano magazyn energii: ${inst.def.name}`);
+    this.log(`Dodano magazyn energii: ${I18n.deviceName(inst.def)}`);
+    this.questManager.checkMilestones(this._questCtx());
     if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open');
   }
 
@@ -340,13 +364,21 @@ class UIManager {
     this.log(`${inst.customName||inst.def.name}: ${isOn?'wyłączono':'włączono'} (podwójne kliknięcie)`);
     if (this.transformManager.selectedId === id) this.renderProperties(inst);
   }
-  _renderWeatherBadge(ev){
+  /** Shows the continuous sky condition normally (section 10), switching to the more urgent
+   *  extreme-event styling whenever one is active (storm/gale/heatwave/coldsnap - unchanged mechanic). */
+  _renderWeatherBadge(){
     const el = document.getElementById('weatherBadge');
-    if (!ev){ el.classList.add('hidden'); return; }
+    const wx = this.weatherManager;
     el.classList.remove('hidden');
-    el.className = 'weather-badge active-'+ev.id;
-    el.innerHTML = `${ev.icon} <b>${ev.name}</b>`;
-    el.title = ev.desc;
+    if (wx.active){
+      el.className = 'weather-badge active-'+wx.active.id;
+      el.innerHTML = `${wx.active.icon} <b>${I18n.t(wx.active.nameKey)}</b>`;
+      el.title = I18n.t(wx.active.descKey);
+    } else {
+      el.className = 'weather-badge sky-'+wx.condition.id;
+      el.innerHTML = `${wx.condition.icon} <b>${I18n.t(wx.condition.nameKey)}</b> · ${(wx.factor*100).toFixed(0)}%`;
+      el.title = I18n.t('weather.pvFactorHint');
+    }
   }
 
   // ============================================================
@@ -357,7 +389,11 @@ class UIManager {
     const panel = document.getElementById('petPanel');
     widget.addEventListener('click', ()=>{
       panel.classList.toggle('hidden');
-      if (!panel.classList.contains('hidden')) this._renderPet();
+      if (!panel.classList.contains('hidden')){
+        this._renderPet();
+        document.getElementById('petTipDot').classList.add('hidden');
+        this.petManager.awardDataAnalyzed('pet_panel', this.simulationEngine.simDayIndex);
+      }
     });
     document.getElementById('petPanelClose').addEventListener('click', ()=> panel.classList.add('hidden'));
     document.getElementById('petNameInput').addEventListener('change', (e)=> this.petManager.rename(e.target.value));
@@ -365,6 +401,13 @@ class UIManager {
       const ok = this.petManager.feed();
       if (ok){ this._playPetAnim('pulse'); this._renderPet(); }
       else this.toast('Poczekaj chwilę, zanim znów nakarmisz zwierzaka.');
+    });
+    document.querySelectorAll('.pet-tab').forEach(t=>{
+      t.addEventListener('click', ()=>{
+        document.querySelectorAll('.pet-tab').forEach(x=>x.classList.toggle('active', x===t));
+        document.querySelectorAll('.pet-tab-pane').forEach(p=>p.classList.add('hidden'));
+        document.getElementById('petPane'+t.dataset.pettab[0].toUpperCase()+t.dataset.pettab.slice(1)).classList.remove('hidden');
+      });
     });
     this._renderPet();
   }
@@ -376,18 +419,51 @@ class UIManager {
     document.getElementById('petAvatarBig').textContent = stage.emoji;
     document.getElementById('petLevelBadge').textContent = pm.level;
     document.getElementById('petLevelNum').textContent = pm.level;
+    document.getElementById('petMaxLabel').textContent = pm.level>=50 ? '★ MAX' : '';
     document.getElementById('petStageName').textContent = stage.name;
     document.getElementById('petNameInput').value = pm.name;
     document.getElementById('petXpFill').style.width = pm.xpPct+'%';
     document.getElementById('petXpLabel').textContent = pm.xpToNext===Infinity
-      ? `${Math.round(pm.xp)} XP (max. poziom)` : `${Math.round(pm.xp)} / ${pm.xpToNext} XP`;
+      ? `${Math.round(pm.xp)} XP (${I18n.lang==='en'?'max level':'poziom maks.'})` : `${Math.round(pm.xp)} / ${pm.xpToNext} XP`;
     document.getElementById('petMoodFill').style.width = Math.round(pm.mood)+'%';
     const tricks = document.getElementById('petTricks');
-    tricks.innerHTML = pm.unlockedTricks.map(t=>`<button class="trick-btn" data-trick="${t.id}">✨ ${t.label}</button>`).join('')
+    tricks.innerHTML = pm.unlockedTricks.map(t=>`<button class="trick-btn" data-trick="${t.id}">✨ ${I18n.t(t.labelKey)}</button>`).join('')
       || '<div style="font-size:11px;color:var(--text-3)">Kolejne sztuczki odblokują się wraz z poziomem.</div>';
     tricks.querySelectorAll('[data-trick]').forEach(b=>{
       b.addEventListener('click', ()=> this._playPetAnim(b.dataset.trick));
     });
+    this._renderPetTips();
+    this._renderPetQuests();
+    this._renderPetUnlocks();
+  }
+
+  _renderPetTips(){
+    const wrap = document.getElementById('petPaneTips');
+    if (!wrap) return;
+    const tips = this._latestTips || [];
+    wrap.innerHTML = tips.length
+      ? tips.map(t=>`<div class="advisor-tip ${t.level}">${t.level==='warning'?'⚠':t.level==='tip'?'💡':'ℹ'} ${t.text}</div>`).join('')
+      : `<div class="pet-empty-note">${I18n.t('pet.noTips')}</div>`;
+  }
+  _renderPetQuests(){
+    const wrap = document.getElementById('petPaneQuests');
+    if (!wrap) return;
+    const list = this.questManager.listWithStatus(this._questCtx());
+    wrap.innerHTML = list.map(q=>`
+      <div class="quest-item ${q.done?'done':''}">
+        <div class="quest-item-head"><span>${q.done?'✅':'⬜'} ${I18n.t(q.titleKey)}</span><span class="quest-xp">+${q.xp} XP</span></div>
+        <div class="quest-desc">${I18n.t(q.descKey)}</div>
+        <div class="quest-bar"><div class="quest-bar-fill" style="width:${(q.progress*100).toFixed(0)}%"></div></div>
+      </div>`).join('');
+  }
+  _renderPetUnlocks(){
+    const wrap = document.getElementById('petPaneUnlocks');
+    if (!wrap) return;
+    const pm = this.petManager;
+    const next = pm.nextUnlock;
+    let html = pm.unlockedFeatures.map(u=>`<div class="unlock-item done">✅ ${I18n.t(u.labelKey)} <span class="unlock-lvl">Lv.${u.atLevel}</span></div>`).join('');
+    if (next) html += `<div class="unlock-item next">🔒 ${I18n.t(next.labelKey)} <span class="unlock-lvl">${I18n.t('pet.nextUnlock')}: Lv.${next.atLevel}</span></div>`;
+    wrap.innerHTML = html;
   }
 
   _playPetAnim(name){
@@ -548,25 +624,38 @@ class UIManager {
       const def = inst.def;
       const gen = Math.max(0, -inst.runtime.powerW);
       const s = this.getEnergySettings();
+      const orient = inst.pvOrientation || SolarCalculator.DEFAULT_ORIENTATION;
+      const doy = this.simulationEngine.dayOfYear;
+      const aim = SolarCalculator.aimQuality(orient, doy);
+      const aimLabel = aim>=0.85 ? I18n.t('pv.aimExcellent') : aim>=0.6 ? I18n.t('pv.aimGood') : I18n.t('pv.aimPoor');
+      const aimColor = aim>=0.85 ? 'var(--accent-good)' : aim>=0.6 ? 'var(--accent-power)' : 'var(--accent-danger)';
       html += `
       <div class="prop-section">
-        <h4>Panel PV</h4>
+        <h4>${I18n.t('panel.pv')}</h4>
         <div class="prop-row"><span class="lbl">Producent</span><span class="val">${def.manufacturer}</span></div>
         <div class="prop-row"><span class="lbl">Model</span><span class="val">${def.model}</span></div>
-        <div class="prop-row"><span class="lbl">Moc szczytowa</span><span class="val">${EnergyCalculator.fmtW(def.peakPowerW)}</span></div>
-        <div class="prop-row"><span class="lbl">Produkcja teraz</span><span class="val" style="color:var(--accent-good)">${EnergyCalculator.fmtW(gen)}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('pv.panelPower')}</span><span class="val">${EnergyCalculator.fmtW(def.peakPowerW)}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('panel.currentProduction')}</span><span class="val" style="color:var(--accent-good)">${EnergyCalculator.fmtW(gen)}</span></div>
         <div class="toggle-row"><span class="lbl">Podłączony do falownika</span>
           <label class="switch"><input type="checkbox" id="propConnected" ${inst.connected?'checked':''}><span class="slider-tog"></span></label>
         </div>
         <div style="margin-top:6px"><span class="badge estimated">ESTIMATED</span></div>
         <div style="font-size:11px;color:var(--text-3);margin-top:6px">${def.sourceNote}</div>
+      </div>
+      <div class="prop-section">
+        <h4>${I18n.t('pv.orientation')} &amp; ${I18n.t('pv.tilt')}</h4>
+        <div class="prop-row"><span class="lbl">${I18n.t('pv.compass')}</span><span class="val">${SolarCalculator.compassLabel(orient.azimuthDeg, I18n.lang)} (${orient.azimuthDeg.toFixed(0)}°)</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('pv.tilt')}</span><span class="val">${orient.tiltDeg.toFixed(0)}°</span></div>
+        <div class="aim-bar"><div class="aim-fill" style="width:${(aim*100).toFixed(0)}%;background:${aimColor}"></div></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('pv.aimQuality')}</span><span class="val" style="color:${aimColor}">${(aim*100).toFixed(0)}% — ${aimLabel}</span></div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:6px">${I18n.t('pv.idealNote')}</div>
       </div>`;
     } else if (isDevice){
       const def = inst.def;
       const dsBadge = def.dataSource==='manufacturer' ? '<span class="badge manufacturer">MANUFACTURER</span>' : '<span class="badge estimated">ESTIMATED</span>';
       const dailyKWh = (this.simulationEngine.todayKWhByDevice[inst.id]||0);
       const s = this.getEnergySettings();
-      const rate = EnergyCalculator.priceAt(this.simulationEngine.minuteOfDay, s);
+      const rate = EnergyCalculator.priceAt(this.simulationEngine.absMin, s);
       const mo = inst.manualOverride;
       html += `
       <div class="prop-section">
@@ -588,7 +677,7 @@ class UIManager {
           <span class="state-pill"><span class="state-dot" style="background:${this._stateColor(inst.runtime.state)}"></span>${inst.runtime.state}</span>
         </span></div>
         <div class="prop-row"><span class="lbl">Dzisiejsza energia</span><span class="val">${EnergyCalculator.fmtKWh(dailyKWh)}</span></div>
-        <div class="prop-row"><span class="lbl">Taryfa teraz</span><span class="val">${rate.toFixed(2)} ${s.currency}/kWh ${s.tariffMode==='dual' ? (EnergyCalculator.isNightRate(this.simulationEngine.minuteOfDay,s)?'🌙':'☀'):''}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('tariff.currentRate')}</span><span class="val">${rate.toFixed(2)} ${s.currency}/kWh ${EnergyCalculator.isCheapRateAt(this.simulationEngine.absMin,s)?'🟢':EnergyCalculator.isExpensiveRateAt(this.simulationEngine.absMin,s)?'🔴':''} <span class="tariff-code-pill">${s.tariffCode}</span></span></div>
         <div class="toggle-row"><span class="lbl">Podłączone do gniazdka</span>
           <label class="switch"><input type="checkbox" id="propConnected" ${inst.connected?'checked':''}><span class="slider-tog"></span></label>
         </div>
@@ -629,13 +718,12 @@ class UIManager {
         <div style="font-size:11px;color:var(--text-3);margin-top:4px">${def.sourceNote}</div>
       </div>
       <div class="prop-section">
-        <h4>Schedule</h4>
-        <div class="sched-field"><span>Start</span><input type="time" id="schedStart" value="${inst.schedule.start}"></div>
-        <div class="sched-field"><span>Koniec</span><input type="time" id="schedEnd" value="${inst.schedule.end}"></div>
-        <div class="days-row" id="daysRow"></div>
+        <h4>${I18n.t('sched.title')}</h4>
+        <div class="sched-summary-text">${ScheduleManager.summarize(ScheduleManager.normalize(inst.schedule, def), I18n.lang)}</div>
         <div class="timeline24" id="timeline24"></div>
+        <button class="small-btn" id="propSchedBtn">${I18n.t('sched.editButton')}</button>
       </div>
-      <div class="prop-section"><button class="small-btn" id="propAddCompare">➕ Dodaj do porównania (${this.compareSelection.length}/2)</button></div>`;
+      <div class="prop-section"><button class="small-btn" id="propAddCompare">➕ ${I18n.t('stats.compareDevices')} (${this.compareSelection.length}/2)</button></div>`;
     }
 
     content.innerHTML = html;
@@ -667,8 +755,7 @@ class UIManager {
         });
       });
       document.getElementById('propEduBtn').addEventListener('click', ()=>this.openEdu(inst));
-      document.getElementById('schedStart').addEventListener('change', (e)=>{ inst.schedule.start=e.target.value; this._renderDaysAndTimeline(inst); this.projectManager.pushHistory(); });
-      document.getElementById('schedEnd').addEventListener('change', (e)=>{ inst.schedule.end=e.target.value; this._renderDaysAndTimeline(inst); this.projectManager.pushHistory(); });
+      document.getElementById('propSchedBtn').addEventListener('click', ()=> this._openDeviceScheduleEditor(inst));
       const cmp = document.getElementById('propAddCompare');
       if (cmp) cmp.addEventListener('click', ()=>{
         if (!this.compareSelection.includes(inst.id)) this.compareSelection.push(inst.id);
@@ -698,22 +785,10 @@ class UIManager {
     if (stateEl) stateEl.innerHTML = `<span class="state-dot" style="background:${this._stateColor(inst.runtime.state)}"></span>${inst.runtime.state}`;
   }
 
+  /** Read-only 24h preview strip for TODAY's specific weekday (editing now lives in the schedule modal - section 3). */
   _renderDaysAndTimeline(inst){
-    const daysRow = document.getElementById('daysRow');
-    const labels = ['Nd','Pn','Wt','Śr','Cz','Pt','So'];
-    daysRow.innerHTML='';
-    for (let d=0; d<7; d++){
-      const chip = document.createElement('div');
-      chip.className='day-chip'+(inst.schedule.days.includes(d)?' active':'');
-      chip.textContent = labels[d];
-      chip.addEventListener('click', ()=>{
-        if (inst.schedule.days.includes(d)) inst.schedule.days = inst.schedule.days.filter(x=>x!==d);
-        else inst.schedule.days.push(d);
-        this._renderDaysAndTimeline(inst); this.projectManager.pushHistory();
-      });
-      daysRow.appendChild(chip);
-    }
     const tl = document.getElementById('timeline24');
+    if (!tl) return;
     tl.innerHTML='';
     const dayIdx = this.simulationEngine.simDay;
     for (let h=0; h<24; h++){
@@ -723,7 +798,7 @@ class UIManager {
       seg.style.flex='1';
       const isOn = state && state!=='off' && state!=='standby';
       seg.style.background = isOn ? 'var(--accent-good)' : (state==='standby' ? 'var(--accent-power)' : 'rgba(255,255,255,0.06)');
-      seg.title = `${h}:00 — ${state}`;
+      seg.title = `${h}:00 — ${I18n.deviceState(state)}`;
       tl.appendChild(seg);
     }
   }
@@ -762,14 +837,19 @@ class UIManager {
     const alerts = this.analyticsManager.alerts(sim);
     const wrap = document.getElementById('emAlerts');
     let html = '';
-    if (s.tariffMode==='dual'){
-      const night = EnergyCalculator.isNightRate(sim.minuteOfDay, s);
-      html += `<span class="tariff-badge ${night?'night':'day'}">${night?'🌙 Taryfa nocna':'☀ Taryfa dzienna'}</span>`;
+    if (!TariffManager.isFlat(s.tariffCode)){
+      const cheap = EnergyCalculator.isCheapRateAt(sim.absMin, s);
+      const expensive = EnergyCalculator.isExpensiveRateAt(sim.absMin, s);
+      const rateId = TariffManager.rateAt(TariffManager.get(s.tariffCode), s.tariffSchedules[s.tariffCode], sim.absMin);
+      const rateLabel = I18n.t(TariffManager.rateMeta(TariffManager.get(s.tariffCode), rateId).labelKey);
+      html += `<span class="tariff-badge ${cheap?'night':expensive?'peak':'day'}">${cheap?'🟢':expensive?'🔴':'🟡'} ${rateLabel} (${s.tariffCode})</span>`;
     }
     html += alerts.map(a=>`<div class="alert-chip ${a.level}">${a.level==='warning'?'⚠':a.level==='tip'?'💡':'ℹ'} ${a.text}</div>`).join('');
     wrap.innerHTML = html;
     if (!document.getElementById('dashboardModal').classList.contains('hidden')) this.refreshDashboard();
     this._checkAchievements();
+    this._runAdvisor();
+    this.questManager.checkMilestones(this._questCtx());
   }
 
   // ============================================================
@@ -798,6 +878,8 @@ class UIManager {
         if (t.dataset.tab==='compare') this._renderCompare();
         if (t.dataset.tab==='solar') this._renderSolarPane();
         if (t.dataset.tab==='scenarios') this._renderScenariosPane();
+        if (t.dataset.tab==='stats') this._renderStatsPane();
+        if (t.dataset.tab==='savings') this._renderSavingsPane();
       });
     });
   }
@@ -811,24 +893,82 @@ class UIManager {
     const sim = this.simulationEngine;
     const proj = this.analyticsManager.projections(sim.todayKWh, sim.todaySolarKWh, sim.todayCost);
     const s = this.getEnergySettings();
-    const netToday = proj.today - proj.todayGen;
-    document.getElementById('dashCards').innerHTML = [
-      ['MOC TERAZ', EnergyCalculator.fmtW(sim.currentPowerW), 'power'],
-      ['PRODUKCJA PV', '+'+EnergyCalculator.fmtW(sim.currentGenW), 'good'],
-      ['ZUŻYCIE DZIŚ', EnergyCalculator.fmtKWh(proj.today), null],
-      ['KOSZT NETTO DZIŚ', EnergyCalculator.fmtCost(proj.todayCost,s.currency), proj.todayCost<0?'good':null],
-      ['MIESIĄC', proj.month.toFixed(1)+' kWh', null],
-      ['KOSZT MIESIĄCA', EnergyCalculator.fmtCost(proj.monthCost,s.currency), proj.monthCost<0?'good':null],
-      ['ROK (SZAC.)', Math.round(proj.year)+' kWh', null],
-      ['CO₂ / rok (uniknięte dzięki PV)', Math.round(proj.co2AvoidedYear)+' kg', 'good'],
-      ['OSZCZĘDNOŚCI ŁĄCZNIE (sesja)', EnergyCalculator.fmtCost(sim.totalSavedPLN,s.currency), 'good'],
-    ].map(([l,v,cls])=>`<div class="dash-card ${cls?('dc-'+cls):''}"><div class="dc-label">${l}</div><div class="dc-value">${v}</div></div>`).join('');
+    const cards = [
+      { key:'power', l:'MOC TERAZ', v:EnergyCalculator.fmtW(sim.currentPowerW), cls:'power' },
+      { key:'gen', l:I18n.t('footer.pvProduction'), v:'+'+EnergyCalculator.fmtW(sim.currentGenW), cls:'good' },
+      { key:'today', l:I18n.t('stats.consumption')+' — '+I18n.t('common.today'), v:EnergyCalculator.fmtKWh(proj.today), cls:null },
+      { key:'costToday', l:I18n.t('footer.netCostToday'), v:EnergyCalculator.fmtCost(proj.todayCost,s.currency), cls:proj.todayCost<0?'good':null },
+      { key:'month', l:I18n.t('common.month'), v:proj.month.toFixed(1)+' kWh', cls:null },
+      { key:'costMonth', l:I18n.t('footer.costMonth'), v:EnergyCalculator.fmtCost(proj.monthCost,s.currency), cls:proj.monthCost<0?'good':null },
+      { key:'year', l:I18n.t('common.year')+' ('+I18n.t('common.estimate')+')', v:Math.round(proj.year)+' kWh', cls:null },
+      { key:'co2', l:'CO₂ / '+I18n.t('common.year')+' ('+I18n.t('stats.reduction')+')', v:Math.round(proj.co2AvoidedYear)+' kg', cls:'good' },
+      { key:'lifetime', l:I18n.t('stats.lifetimeSavings'), v:EnergyCalculator.fmtCost(sim.totalSavedPLN,s.currency), cls:'good' },
+    ];
+    document.getElementById('dashCards').innerHTML = cards.map(c=>`<div class="dash-card ${c.cls?('dc-'+c.cls):''}" data-key="${c.key}"><div class="dc-label">${c.l}</div><div class="dc-value">${c.v}</div></div>`).join('');
+    document.querySelectorAll('#dashCards .dash-card').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        this._expandedCard = (this._expandedCard===el.dataset.key) ? null : el.dataset.key;
+        this._renderCardDetail(proj);
+      });
+    });
+    this._renderCardDetail(proj);
 
     document.getElementById('tabSolar').classList.toggle('hidden', this.objectManager.getSolar().length===0 && this.objectManager.getBattery().length===0);
 
     this._renderCharts(proj);
     this._renderRanking();
     this._renderScore();
+  }
+
+  /** Section 7/20/21: click any dashboard card to expand a full drill-down (today/yesterday/week/
+   *  month/year/forecast for that metric) - "ogólne informacje → szczegóły" without leaving the page. */
+  _renderCardDetail(proj){
+    const box = document.getElementById('dashCardDetail');
+    document.querySelectorAll('#dashCards .dash-card').forEach(el=>el.classList.toggle('expanded', el.dataset.key===this._expandedCard));
+    if (!this._expandedCard){ box.classList.add('hidden'); box.innerHTML=''; return; }
+    const sim = this.simulationEngine; const s = this.getEnergySettings();
+    const yb = this.analyticsManager.yearBreakdown();
+    const y = sim.simDate.getFullYear();
+    const rows = (label, val)=>`<div class="cd-row"><span>${label}</span><b>${val}</b></div>`;
+    let title='', body='';
+    const key = this._expandedCard;
+    if (key==='today' || key==='costToday' || key==='power'){
+      const bd = this.analyticsManager.breakdownToday(sim);
+      title = I18n.t('stats.consumption');
+      body = rows(I18n.t('stats.today'), EnergyCalculator.fmtKWh(sim.todayKWh))
+        + rows(I18n.t('stats.yesterday'), sim.lastCompletedDay?EnergyCalculator.fmtKWh(sim.lastCompletedDay.consumedKWh):'—')
+        + rows(I18n.t('stats.thisWeek'), EnergyCalculator.fmtKWh(proj.week))
+        + rows(I18n.t('stats.thisMonth'), EnergyCalculator.fmtKWh(proj.month))
+        + rows(I18n.t('stats.yearForecast'), EnergyCalculator.fmtKWh(proj.year))
+        + `<div class="cd-sub">${I18n.t('stats.byCategory')}</div>`
+        + bd.byCategory.slice(0,6).map(c=>rows(c.label, `${EnergyCalculator.fmtKWh(c.kWh)} (${c.pct.toFixed(0)}%)`)).join('');
+    } else if (key==='gen'){
+      const solar = this.analyticsManager.solarSummary();
+      title = I18n.t('panel.pv');
+      body = rows(I18n.t('stats.today'), EnergyCalculator.fmtKWh(sim.todaySolarKWh))
+        + rows(I18n.t('stats.yesterday'), sim.lastCompletedDay?EnergyCalculator.fmtKWh(sim.lastCompletedDay.solarKWh):'—')
+        + rows(I18n.t('stats.thisWeek'), EnergyCalculator.fmtKWh(proj.weekGen))
+        + rows(I18n.t('stats.thisMonth'), EnergyCalculator.fmtKWh(solar.monthGenKWh))
+        + rows(I18n.t('stats.thisYear'), EnergyCalculator.fmtKWh(solar.yearGenKWh))
+        + rows(I18n.t('pv.panelCount'), solar.count)
+        + rows(I18n.t('pv.totalPower'), EnergyCalculator.fmtW(solar.totalPeakW));
+    } else if (key==='month' || key==='costMonth'){
+      title = I18n.t('common.month');
+      body = rows(I18n.t('stats.thisMonth'), EnergyCalculator.fmtKWh(proj.month))
+        + rows(I18n.t('footer.costMonth'), EnergyCalculator.fmtCost(proj.monthCost, s.currency))
+        + rows(I18n.t('stats.thisYear')+' ('+I18n.t('common.estimate')+')', EnergyCalculator.fmtKWh(proj.year))
+        + rows(I18n.t('footer.costYear'), EnergyCalculator.fmtCost(proj.yearCost, s.currency));
+    } else if (key==='year' || key==='co2'){
+      title = `${I18n.t('common.year')} ${y}`;
+      body = yb.months.map(mo=>rows(`${mo.label}${mo.isProjected?' ('+I18n.t('common.estimate')+')':''}`, EnergyCalculator.fmtKWh(mo.consumedKWh))).join('');
+    } else if (key==='lifetime'){
+      title = I18n.t('stats.lifetimeSavings');
+      body = rows(I18n.t('common.since'), EnergyCalculator.fmtCost(sim.totalSavedPLN, s.currency))
+        + rows(I18n.t('stats.gridImport'), EnergyCalculator.fmtKWh(sim.totalImportKWh))
+        + rows(I18n.t('stats.gridExport'), EnergyCalculator.fmtKWh(sim.totalExportKWh));
+    }
+    box.innerHTML = `<h4>${title} — ${I18n.t('common.details')}</h4>${body}`;
+    box.classList.remove('hidden');
   }
 
   _chart(id, config){
@@ -852,7 +992,8 @@ class UIManager {
       ]
     }, options:{ responsive:true, maintainAspectRatio:false, plugins:{title:{display:true,text:'Power over time',color:'#e8edf4'}} }});
 
-    const hourColors = [...Array(24).keys()].map(h=> EnergyCalculator.isNightRate(h*60, s) ? 'rgba(155,123,255,0.75)' : 'rgba(79,209,197,0.85)');
+    const dayBase0 = sim.absMin - sim.minuteOfDay;
+    const hourColors = [...Array(24).keys()].map(h=> EnergyCalculator.isCheapRateAt(dayBase0+h*60, s) ? 'rgba(79,209,197,0.85)' : (EnergyCalculator.isExpensiveRateAt(dayBase0+h*60,s) ? 'rgba(255,107,107,0.75)' : 'rgba(255,182,72,0.8)'));
     this._chart('chartEnergyByHour', { type:'bar', data:{
       labels:[...Array(24).keys()].map(h=>h+':00'),
       datasets:[{ label:'kWh (fiolet = taryfa nocna)', data: sim.hourlyKWh, backgroundColor:hourColors }]
@@ -1055,15 +1196,31 @@ class UIManager {
 
   _renderCompare(){
     const pane = document.getElementById('comparePanel');
+    this._compareSubTab = this._compareSubTab || 'devices';
+    pane.innerHTML = `
+      <div class="sub-tabs">
+        <button class="sub-tab ${this._compareSubTab==='devices'?'active':''}" data-sub="devices">${I18n.t('stats.compareDevices')}</button>
+        <button class="sub-tab ${this._compareSubTab==='periods'?'active':''}" data-sub="periods">${I18n.t('stats.comparePeriod')}</button>
+      </div>
+      <div id="compareSubBody"></div>`;
+    pane.querySelectorAll('.sub-tab').forEach(b=>{
+      b.addEventListener('click', ()=>{ this._compareSubTab=b.dataset.sub; this._renderCompare(); });
+    });
+    if (this._compareSubTab==='periods') this._renderComparePeriods();
+    else this._renderCompareDevices();
+  }
+
+  _renderCompareDevices(){
+    const pane = document.getElementById('compareSubBody');
     const devices = this.objectManager.getDevices();
     if (devices.length<2){ pane.innerHTML='<div style="color:var(--text-3)">Dodaj co najmniej dwa urządzenia, aby je porównać.</div>'; return; }
     const a = this.compareSelection[0] || devices[0].id;
     const b = this.compareSelection[1] || devices[1].id;
     pane.innerHTML = `
       <div class="wi-row">
-        <select class="std-select" id="cmpA">${devices.map(d=>`<option value="${d.id}" ${d.id===a?'selected':''}>${d.customName||d.def.name}</option>`).join('')}</select>
+        <select class="std-select" id="cmpA">${devices.map(d=>`<option value="${d.id}" ${d.id===a?'selected':''}>${d.customName||I18n.deviceName(d.def)}</option>`).join('')}</select>
         vs
-        <select class="std-select" id="cmpB">${devices.map(d=>`<option value="${d.id}" ${d.id===b?'selected':''}>${d.customName||d.def.name}</option>`).join('')}</select>
+        <select class="std-select" id="cmpB">${devices.map(d=>`<option value="${d.id}" ${d.id===b?'selected':''}>${d.customName||I18n.deviceName(d.def)}</option>`).join('')}</select>
       </div>
       <table class="data-table" id="cmpTable"></table>`;
     const run = ()=>{
@@ -1080,12 +1237,53 @@ class UIManager {
         ['Standby', EnergyCalculator.fmtW(c.a.inst.def.standbyPowerW), EnergyCalculator.fmtW(c.b.inst.def.standbyPowerW)],
         ['Efficiency class', c.a.inst.def.energyClass, c.b.inst.def.energyClass],
       ];
+      if (this.petManager.hasFeature('compare_overlay')){
+        const hh = this.analyticsManager.householdComparison();
+        rowsHtml.push(['% śr. gosp. domowego', (c.a.monthlyKWh*12/hh.refKWh*100).toFixed(0)+'%', (c.b.monthlyKWh*12/hh.refKWh*100).toFixed(0)+'%']);
+      }
       document.getElementById('cmpTable').innerHTML = `<thead><tr><th></th><th>${c.a.name}</th><th>${c.b.name}</th></tr></thead>
         <tbody>${rowsHtml.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</tbody>`;
     };
     document.getElementById('cmpA').addEventListener('change', run);
     document.getElementById('cmpB').addEventListener('change', run);
     run();
+  }
+
+  /** Section 23: real period-over-period comparison, built only from actually-simulated
+   *  history (AnalyticsManager.comparePeriods) - never fabricated when there isn't enough
+   *  played history yet, which is stated plainly instead of faked. */
+  _renderComparePeriods(){
+    const pane = document.getElementById('compareSubBody');
+    const s = this.getEnergySettings();
+    this._periodRange = this._periodRange || 'month';
+    const cmp = this.analyticsManager.comparePeriods(this._periodRange);
+    const rangeLabel = this._periodRange==='week' ? I18n.t('common.week') : I18n.t('common.month');
+    let body;
+    if (cmp.insufficientData){
+      body = `<div class="pet-empty-note">${I18n.lang==='pl'
+        ? `Za mało zagranej historii, aby porównać pełne okresy (potrzeba co najmniej ${cmp.needDays||30} dni symulacji). Przyspiesz czas lub wróć później.`
+        : `Not enough played history yet to compare full periods (need at least ${cmp.needDays||30} simulated days). Speed up time or come back later.`}</div>`;
+    } else if (!cmp.hasPrevious){
+      body = `<div class="pet-empty-note">${I18n.lang==='pl' ? 'To pierwszy pełny okres — brak jeszcze poprzedniego do porównania.' : 'This is the first full period — no previous one to compare yet.'}</div>`;
+    } else {
+      const fmtPct = (p)=> p==null ? '—' : (p>=0?'+':'')+p.toFixed(1)+'%';
+      const rows = [
+        [I18n.t('stats.consumption'), EnergyCalculator.fmtKWh(cmp.previous.consumedKWh), EnergyCalculator.fmtKWh(cmp.current.consumedKWh), fmtPct(cmp.changeConsumedPct)],
+        [I18n.t('stats.cost'), EnergyCalculator.fmtCost(cmp.previous.cost,s.currency), EnergyCalculator.fmtCost(cmp.current.cost,s.currency), fmtPct(cmp.changeCostPct)],
+        [I18n.t('stats.production'), EnergyCalculator.fmtKWh(cmp.previous.solarKWh), EnergyCalculator.fmtKWh(cmp.current.solarKWh), fmtPct(cmp.changeSolarPct)],
+      ];
+      body = `<table class="data-table"><thead><tr><th></th><th>${I18n.t('stats.previousPeriod')}</th><th>${I18n.t('stats.currentPeriod')}</th><th>${I18n.t('stats.change')}</th></tr></thead>
+        <tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td style="color:${parseFloat(r[3])>0?'var(--accent-danger)':'var(--accent-good)'}">${r[3]}</td></tr>`).join('')}</tbody></table>`;
+    }
+    pane.innerHTML = `
+      <div class="wi-row">
+        <select class="std-select" id="periodRangeSel">
+          <option value="week" ${this._periodRange==='week'?'selected':''}>${I18n.t('common.week')}</option>
+          <option value="month" ${this._periodRange==='month'?'selected':''}>${I18n.t('common.month')}</option>
+        </select>
+      </div>
+      ${body}`;
+    document.getElementById('periodRangeSel').addEventListener('change', (e)=>{ this._periodRange=e.target.value; this._renderComparePeriods(); });
   }
 
   // ============================================================
@@ -1316,81 +1514,152 @@ class UIManager {
   // SETTINGS (tariff / price / currency / CO2 / solar assumptions)
   // ============================================================
   _bindSettingsModal(){}
+  _tariffPriceFieldsHtml(s, code){
+    const t = TariffManager.get(code);
+    const prices = s.tariffPrices[code] || t.defaultPrices;
+    return t.rates.map(r=>`
+      <div class="field-row"><label>${I18n.t(r.labelKey)}</label><input type="number" step="0.01" class="tariff-rate-input" data-rate="${r.id}" value="${prices[r.id]}"></div>
+    `).join('');
+  }
+  _tariffScheduleSummaryHtml(s, code){
+    const t = TariffManager.get(code);
+    if (t.rates.length<=1) return `<div style="font-size:11.5px;color:var(--text-3)">${I18n.t('tariff.G11.desc')}</div>`;
+    const schedule = s.tariffSchedules[code];
+    const lines = [];
+    for (const d of [1,2,3,4,5,6,0]){
+      const ivs = schedule.days[d]||[];
+      if (!ivs.length) continue;
+      lines.push(`<b>${I18n.dayShort(d)}</b>: ` + ivs.map(iv=>`${iv.start}-${iv.end} (${I18n.t(TariffManager.rateMeta(t,iv.rate).labelKey)})`).join(', '));
+    }
+    return lines.length ? lines.map(l=>`<div class="tariff-sched-line">${l}</div>`).join('') : `<div style="font-size:11.5px;color:var(--text-3)">${I18n.t('tariff.rate.day')} ${I18n.t('common.all')}</div>`;
+  }
   openSettings(){
     const s = this.getEnergySettings();
     const body = document.getElementById('settingsBody');
-    body.innerHTML = `
-      <div class="field-row"><label>Taryfa</label>
-        <select id="setTariffMode"><option value="flat" ${s.tariffMode==='flat'?'selected':''}>Jednostrefowa</option><option value="dual" ${s.tariffMode==='dual'?'selected':''}>Dwustrefowa (dzień/noc)</option></select>
-      </div>
-      <div id="flatFields" class="${s.tariffMode==='dual'?'hidden':''}">
-        <div class="field-row"><label>Cena energii</label><input type="number" step="0.01" id="setPrice" value="${s.pricePerKWh}"></div>
-      </div>
-      <div id="dualFields" class="${s.tariffMode==='flat'?'hidden':''}">
-        <div class="field-row"><label>Cena dzienna</label><input type="number" step="0.01" id="setPriceDay" value="${s.priceDay}"></div>
-        <div class="field-row"><label>Cena nocna</label><input type="number" step="0.01" id="setPriceNight" value="${s.priceNight}"></div>
-        <div class="field-row"><label>Noc od</label><input type="time" id="setNightStart" value="${s.nightStart}"></div>
-        <div class="field-row"><label>Noc do</label><input type="time" id="setNightEnd" value="${s.nightEnd}"></div>
-      </div>
-      <div class="field-row"><label>Waluta</label><input type="text" id="setCurrency" value="${s.currency}" maxlength="4"></div>
-      <div class="field-row"><label>Opłaty dodatkowe / mies.</label><input type="number" step="0.5" id="setFees" value="${s.extraFeesPerMonth}"></div>
-      <div class="field-row"><label>Współczynnik CO₂ (kg/kWh)</label><input type="number" step="0.01" id="setCo2" value="${s.co2Factor}"></div>
-      <div class="field-row"><label>Pogoda (wpływa na PV)</label>
-        <div class="weather-presets">
-          <button type="button" class="wp-btn" data-cloud="5">☀ Słonecznie</button>
-          <button type="button" class="wp-btn" data-cloud="35">⛅ Częściowe zachmurzenie</button>
-          <button type="button" class="wp-btn" data-cloud="75">☁ Pochmurno</button>
+    const renderBody = ()=>{
+      const cur = this.getEnergySettings();
+      const t = TariffManager.get(cur.tariffCode);
+      body.innerHTML = `
+      <div class="field-row"><label>${I18n.t('settings.language')}</label>
+        <div class="lang-switch">
+          <button class="lang-btn ${I18n.lang==='pl'?'active':''}" data-lang="pl">PL</button>
+          <button class="lang-btn ${I18n.lang==='en'?'active':''}" data-lang="en">EN</button>
         </div>
       </div>
-      <div class="field-row"><label>Zachmurzenie (PV)</label><input type="range" min="0" max="90" id="setCloud" value="${Math.round(s.cloudFactor*100)}"></div>
-      <div class="field-row"><label>Średnie zużycie w PL (referencja)</label><input type="number" step="50" id="setAvgHousehold" value="${s.avgHouseholdKWhYear}"></div>
+      <hr style="border-color:var(--border);margin:14px 0">
+      <h4 class="settings-section-h">${I18n.t('settings.tariffSection')}</h4>
+      <div class="field-row"><label>${I18n.t('tariff.title')}</label>
+        <select id="setTariffCode">${TariffManager.CODES.map(c=>`<option value="${c}" ${c===cur.tariffCode?'selected':''}>${c} — ${I18n.t(TariffManager.get(c).shortDescKey)}</option>`).join('')}</select>
+      </div>
+      <div id="tariffPriceFields">${this._tariffPriceFieldsHtml(cur, cur.tariffCode)}</div>
+      <div class="field-row"><label>${I18n.t('tariff.exportPrice')}</label><input type="number" step="0.01" id="setExportPrice" value="${cur.exportPricePerKWh}"></div>
+      <div class="tariff-detail-box" id="tariffDetailBox">${this._tariffScheduleSummaryHtml(cur, cur.tariffCode)}</div>
+      <button class="small-btn" id="setEditTariffSched" ${t.rates.length<=1?'disabled':''}>🕐 ${I18n.t('tariff.editSchedule')}</button>
+
+      <hr style="border-color:var(--border);margin:16px 0">
+      <h4 class="settings-section-h">${I18n.t('settings.pvSection')}</h4>
+      <div class="field-row"><label>${I18n.t('priority.title')}</label>
+        <select id="setPvPriority">
+          <option value="home_first" ${cur.pvPriority==='home_first'?'selected':''}>${I18n.t('priority.home_first')}</option>
+          <option value="battery_first" ${cur.pvPriority==='battery_first'?'selected':''}>${I18n.t('priority.battery_first')}</option>
+        </select>
+      </div>
+      <div style="font-size:11px;color:var(--text-3);margin-bottom:10px" id="pvPriorityDesc">${cur.pvPriority==='battery_first'?I18n.t('priority.battery_firstDesc'):I18n.t('priority.home_firstDesc')}</div>
+
+      <hr style="border-color:var(--border);margin:16px 0">
+      <h4 class="settings-section-h">${I18n.t('settings.generalSection')}</h4>
+      <div class="field-row"><label>${I18n.t('common.currency')}</label><input type="text" id="setCurrency" value="${cur.currency}" maxlength="4"></div>
+      <div class="field-row"><label>Opłaty dodatkowe / mies.</label><input type="number" step="0.5" id="setFees" value="${cur.extraFeesPerMonth}"></div>
+      <div class="field-row"><label>${I18n.t('settings.co2Factor')}</label><input type="number" step="0.01" id="setCo2" value="${cur.co2Factor}"></div>
+      <div class="field-row"><label>${I18n.t('settings.avgHousehold')}</label><input type="number" step="50" id="setAvgHousehold" value="${cur.avgHouseholdKWhYear}"></div>
       <div style="font-size:11px;color:var(--text-3);margin:8px 0 14px">Ceny energii, taryfy i współczynnik CO₂ to założenia symulacji, a nie aktualna taryfa operatora — wartości zależą od dostawcy i miksu energetycznego.</div>
-      <button class="primary-btn" id="setApply" style="width:100%">Zapisz ustawienia</button>
+      <button class="primary-btn" id="setApply" style="width:100%">${I18n.t('common.save')}</button>
+
       <hr style="border-color:var(--border);margin:18px 0">
-      <h4 style="font-family:var(--font-display);font-size:12px;color:var(--text-3);text-transform:uppercase;margin-bottom:10px">Projekt</h4>
+      <h4 class="settings-section-h">Projekt</h4>
       <div class="wi-row">
-        <button class="small-btn" id="projNew">🆕 New Project</button>
+        <button class="small-btn" id="projNew">🆕 ${I18n.t('nav.newSim')}</button>
         <button class="small-btn" id="projSave">💾 Save</button>
         <button class="small-btn" id="projLoad">📂 Load</button>
         <button class="small-btn" id="projExport">⬇ Export JSON</button>
         <button class="small-btn" id="projImport">⬆ Import JSON</button>
         <input type="file" id="projImportFile" accept="application/json" class="hidden">
-      </div>`;
-    document.querySelectorAll('.wp-btn').forEach(b=>{
-      b.addEventListener('click', ()=>{ document.getElementById('setCloud').value = b.dataset.cloud; });
-    });
-    document.getElementById('setTariffMode').addEventListener('change', (e)=>{
-      document.getElementById('flatFields').classList.toggle('hidden', e.target.value==='dual');
-      document.getElementById('dualFields').classList.toggle('hidden', e.target.value==='flat');
-    });
-    document.getElementById('setApply').addEventListener('click', ()=>{
-      const mode = document.getElementById('setTariffMode').value;
-      this.setEnergySettings({
-        ...this.getEnergySettings(),
-        tariffMode: mode,
-        pricePerKWh: mode==='flat' ? (Number(document.getElementById('setPrice').value)||1) : this.getEnergySettings().pricePerKWh,
-        priceDay: Number(document.getElementById('setPriceDay').value)||s.priceDay,
-        priceNight: Number(document.getElementById('setPriceNight').value)||s.priceNight,
-        nightStart: document.getElementById('setNightStart').value||s.nightStart,
-        nightEnd: document.getElementById('setNightEnd').value||s.nightEnd,
-        currency: document.getElementById('setCurrency').value||'PLN',
-        extraFeesPerMonth: Number(document.getElementById('setFees').value)||0,
-        co2Factor: Number(document.getElementById('setCo2').value)||0.65,
-        cloudFactor: Number(document.getElementById('setCloud').value)/100,
-        avgHouseholdKWhYear: Number(document.getElementById('setAvgHousehold').value)||2900,
+      </div>
+
+      <hr style="border-color:var(--border);margin:18px 0">
+      <h4 class="settings-section-h" style="color:var(--accent-danger)">${I18n.t('settings.dangerZone')}</h4>
+      <button class="small-btn danger" id="setResetSim" style="width:100%">🗑 ${I18n.t('settings.resetSim')}</button>`;
+
+      body.querySelectorAll('.lang-btn').forEach(b=>{
+        b.addEventListener('click', ()=>{ I18n.setLang(b.dataset.lang); renderBody(); });
       });
-      this.projectManager.pushHistory();
-      this.log('Zaktualizowano ustawienia energii i taryfy.');
-      document.getElementById('settingsModal').classList.add('hidden');
-    });
-    document.getElementById('projNew').addEventListener('click', ()=>{ if (confirm('Utworzyć nowy projekt? Niezapisane zmiany zostaną utracone.')){ this.projectManager.newProject(); this.transformManager.deselect(); this.renderRoomTabs(); } });
-    document.getElementById('projSave').addEventListener('click', ()=>this.projectManager.saveLocal());
-    document.getElementById('projLoad').addEventListener('click', ()=>{ this.projectManager.loadLocal(); this.transformManager.deselect(); this.renderRoomTabs(); });
-    document.getElementById('projExport').addEventListener('click', ()=>this.projectManager.exportFile());
-    document.getElementById('projImport').addEventListener('click', ()=>document.getElementById('projImportFile').click());
-    document.getElementById('projImportFile').addEventListener('change', (e)=>{
-      if (e.target.files[0]) this.projectManager.importFile(e.target.files[0], ()=>{ this.transformManager.deselect(); this.renderRoomTabs(); });
-    });
+      document.getElementById('setTariffCode').addEventListener('change', (e)=>{
+        document.getElementById('tariffPriceFields').innerHTML = this._tariffPriceFieldsHtml(this.getEnergySettings(), e.target.value);
+        document.getElementById('tariffDetailBox').innerHTML = this._tariffScheduleSummaryHtml(this.getEnergySettings(), e.target.value);
+        document.getElementById('setEditTariffSched').disabled = TariffManager.get(e.target.value).rates.length<=1;
+      });
+      document.getElementById('setPvPriority').addEventListener('change', (e)=>{
+        document.getElementById('pvPriorityDesc').textContent = e.target.value==='battery_first' ? I18n.t('priority.battery_firstDesc') : I18n.t('priority.home_firstDesc');
+      });
+      document.getElementById('setEditTariffSched').addEventListener('click', ()=>{
+        const code = document.getElementById('setTariffCode').value;
+        const cur2 = this.getEnergySettings();
+        const t2 = TariffManager.get(code);
+        this._openScheduleEditor({
+          title: `${I18n.t('tariff.title')} ${code}`,
+          mode: 'rate',
+          rateOptions: t2.rates.map(r=>({ id:r.id, label:I18n.t(r.labelKey), color:r.color })),
+          schedule: JSON.parse(JSON.stringify(cur2.tariffSchedules[code])),
+          onSave: (schedule)=>{
+            const es = this.getEnergySettings();
+            es.tariffSchedules[code] = schedule;
+            this.setEnergySettings(es);
+            this.projectManager.pushHistory();
+            this.log(`${I18n.t('tariff.title')} ${code}: ${I18n.t('sched.save')}`);
+            renderBody();
+          },
+        });
+      });
+      document.getElementById('setApply').addEventListener('click', ()=>{
+        const cur3 = this.getEnergySettings();
+        const code = document.getElementById('setTariffCode').value;
+        const newPrices = { ...cur3.tariffPrices };
+        newPrices[code] = {};
+        document.querySelectorAll('.tariff-rate-input').forEach(inp=>{ newPrices[code][inp.dataset.rate] = Number(inp.value)||0; });
+        this.setEnergySettings({
+          ...cur3,
+          tariffCode: code,
+          tariffPrices: newPrices,
+          exportPricePerKWh: Number(document.getElementById('setExportPrice').value)||0,
+          pvPriority: document.getElementById('setPvPriority').value,
+          currency: document.getElementById('setCurrency').value||'PLN',
+          extraFeesPerMonth: Number(document.getElementById('setFees').value)||0,
+          co2Factor: Number(document.getElementById('setCo2').value)||0.65,
+          avgHouseholdKWhYear: Number(document.getElementById('setAvgHousehold').value)||2900,
+        });
+        this.projectManager.pushHistory();
+        this.log('Zaktualizowano ustawienia energii i taryfy.');
+        document.getElementById('settingsModal').classList.add('hidden');
+      });
+      document.getElementById('projNew').addEventListener('click', ()=>{ document.getElementById('settingsModal').classList.add('hidden'); this._openNewSimModal(); });
+      document.getElementById('projSave').addEventListener('click', ()=>this.projectManager.saveLocal());
+      document.getElementById('projLoad').addEventListener('click', ()=>{ this.projectManager.loadLocal(); this.transformManager.deselect(); this.renderRoomTabs(); document.getElementById('settingsModal').classList.add('hidden'); });
+      document.getElementById('projExport').addEventListener('click', ()=>this.projectManager.exportFile());
+      document.getElementById('projImport').addEventListener('click', ()=>document.getElementById('projImportFile').click());
+      document.getElementById('projImportFile').addEventListener('change', (e)=>{
+        if (e.target.files[0]) this.projectManager.importFile(e.target.files[0], ()=>{ this.transformManager.deselect(); this.renderRoomTabs(); document.getElementById('settingsModal').classList.add('hidden'); });
+      });
+      document.getElementById('setResetSim').addEventListener('click', ()=>{
+        if (confirm(I18n.t('settings.resetConfirm'))){
+          this.projectManager.resetSimulation();
+          this.transformManager.deselect();
+          this.renderRoomTabs();
+          document.getElementById('settingsModal').classList.add('hidden');
+          this.toast(I18n.t('log.simulationReset'));
+        }
+      });
+    };
+    renderBody();
     document.getElementById('settingsModal').classList.remove('hidden');
   }
 
@@ -1406,7 +1675,8 @@ class UIManager {
     document.getElementById('eduBody').innerHTML = `
       <div class="edu-term"><b>Moc znamionowa:</b> ${EnergyCalculator.fmtW(def.ratedPowerW)}</div>
       <div class="edu-term">${def.edu}</div>
-      <div class="edu-term"><b>Zużycie dzisiaj:</b> ${EnergyCalculator.fmtKWh(dailyKWh)} · <b>Koszt:</b> ${EnergyCalculator.fmtCost(dailyKWh*(s.tariffMode==='dual'?s.priceDay:s.pricePerKWh),s.currency)}</div>
+      <div class="edu-term"><b>Zużycie dzisiaj:</b> ${EnergyCalculator.fmtKWh(dailyKWh)} · <b>Koszt:</b> ${EnergyCalculator.fmtCost(dailyKWh*EnergyCalculator.effectivePrice(s),s.currency)}</div>
+      <div class="edu-term"><b>${I18n.t('tariff.title')}:</b> ${s.tariffCode} — ${I18n.t(TariffManager.get(s.tariffCode).shortDescKey)}</div>
       <div class="edu-term"><b>W (Wat)</b> — jednostka mocy, czyli chwilowego tempa zużywania energii.</div>
       <div class="edu-term"><b>kW</b> — 1000 W.</div>
       <div class="edu-term"><b>Wh / kWh</b> — jednostka energii = moc × czas. 1 kWh = 1000 W przez 1 godzinę.</div>
@@ -1475,4 +1745,313 @@ class UIManager {
     if (this.objectManager.getSolar().length>=1) this._award('sun_powered', 'Sun Powered — zamontowano pierwszy panel PV');
     if (this.simulationEngine.currentGenW > this.simulationEngine.currentPowerW && this.objectManager.getSolar().length) this._award('net_positive', 'Net Positive — produkcja PV pokrywa całe bieżące zużycie');
   }
+
+  // ============================================================
+  // QUESTS / ADVISOR CONTEXT (sections 16-19)
+  // ============================================================
+  /** Cheap 18-sample morning-window estimate (06:00-09:00), cached 5s - baseline for the
+   *  "frugal morning" quest. Recomputed on demand rather than every tick. */
+  _morningProjectedKWh(){
+    if (this._morningProjCache!=null && (Date.now()-(this._morningProjCacheAt||0))<5000) return this._morningProjCache;
+    const instances = this.objectManager.getDevices();
+    const dayIdx = this.simulationEngine.simDay;
+    let kwh = 0;
+    for (let m=6*60; m<9*60; m+=10){
+      let w=0;
+      for (const inst of instances) w += ScheduleManager.resolve(inst, dayIdx*1440+m).powerW;
+      kwh += EnergyCalculator.wattsMinutesToKWh(w,10);
+    }
+    this._morningProjCache = kwh; this._morningProjCacheAt = Date.now();
+    return kwh;
+  }
+  _questCtx(){
+    const sim = this.simulationEngine, s = this.getEnergySettings();
+    return {
+      solarCount: this.objectManager.getSolar().length,
+      batteryCount: this.objectManager.getBattery().length,
+      dayEntry: { consumedKWh:sim.todayKWh, solarKWh:sim.todaySolarKWh, importKWh:sim.todayImportKWh, exportKWh:sim.todayExportKWh, cost:sim.todayCost, morningKWh:sim.todayMorningKWh },
+      morningProjectedKWh: this._morningProjectedKWh(),
+      effectivePrice: EnergyCalculator.effectivePrice(s),
+      isFlatTariff: TariffManager.isFlat(s.tariffCode),
+      simDayIndex: sim.simDayIndex,
+    };
+  }
+  /** Runs the pet's rule-based advisor every slow-tick (section 16). New tips are merged in front
+   *  of still-relevant older ones (deduped by id) and a small dot marks the pet icon so the player
+   *  notices without an intrusive popup for every observation. */
+  _runAdvisor(){
+    const ctx = { sim: this.simulationEngine, instances: this.objectManager.getDevices(), analytics: this.analyticsManager, settings: this.getEnergySettings(), pet: this.petManager };
+    const fresh = this.advisorEngine.evaluate(ctx);
+    if (fresh.length){
+      const keep = (this._latestTips||[]).filter(old=>!fresh.some(t=>t.id===old.id));
+      this._latestTips = fresh.concat(keep).slice(0,8);
+      const dot = document.getElementById('petTipDot');
+      if (dot) dot.classList.remove('hidden');
+      const panel = document.getElementById('petPanel');
+      if (panel && !panel.classList.contains('hidden')) this._renderPetTips();
+    }
+  }
+
+  // ============================================================
+  // LANGUAGE SWITCHING (section 1) — re-render every open surface
+  // ============================================================
+  _onLanguageChange(){
+    this.renderCategoryTabs();
+    this.renderAssetGrid();
+    this.renderRoomTabs();
+    this._renderWeatherBadge();
+    this._renderPet();
+    const inst = this.objectManager.find(this.transformManager.selectedId);
+    if (inst) this.renderProperties(inst);
+    if (!document.getElementById('dashboardModal').classList.contains('hidden')) this.refreshDashboard();
+    if (!document.getElementById('settingsModal').classList.contains('hidden')) this.openSettings();
+    if (!document.getElementById('smartHomeModal').classList.contains('hidden')) this.openSmartHome();
+    if (!document.getElementById('roomSettingsModal').classList.contains('hidden')) this.openRoomSettings();
+    if (this.pvInstallMode) this._refreshPvInstallBanner();
+  }
+
+  // ============================================================
+  // PV INSTALL MODE (sections 14/15) — panels start uninstalled; this is the guided flow
+  // ============================================================
+  _bindPvInstallMode(){
+    document.getElementById('btnPvInstall').addEventListener('click', ()=> this._togglePvInstallMode());
+    document.getElementById('pvInstallFinishBtn').addEventListener('click', ()=> this._togglePvInstallMode(false));
+  }
+  _togglePvInstallMode(force){
+    this.pvInstallMode = force!=null ? force : !this.pvInstallMode;
+    document.getElementById('btnPvInstall').classList.toggle('active', this.pvInstallMode);
+    document.getElementById('pvInstallBanner').classList.toggle('hidden', !this.pvInstallMode);
+    if (this.pvInstallMode){
+      const house = this.getHouseState();
+      const garage = house.rooms.find(r=>this.roomBuilder.roofGroups[r.id]) || house.rooms[0];
+      if (garage) this.setActiveRoom(garage.id);
+      this.currentCategory = 'solar';
+      this.renderCategoryTabs(); this.renderAssetGrid();
+      if (this.isMobile()) document.getElementById('leftPanel').classList.add('mobile-open');
+      this._refreshPvInstallBanner();
+    } else {
+      this._checkAchievements();
+    }
+  }
+  _refreshPvInstallBanner(){
+    if (!this.pvInstallMode) return;
+    const solar = this.analyticsManager.solarSummary();
+    const el = document.getElementById('pvInstallStats');
+    el.innerHTML = solar.count
+      ? `${I18n.t('pv.panelCount')}: <b>${solar.count}</b> · ${I18n.t('pv.totalPower')}: <b>${EnergyCalculator.fmtW(solar.totalPeakW)}</b> · ${I18n.t('pv.aimQuality')}: <b>${(solar.avgAimQuality*100).toFixed(0)}%</b>`
+      : `<span style="opacity:.85">${I18n.t('pv.notInstalledYet')}</span>`;
+  }
+
+  // ============================================================
+  // SCHEDULE / TARIFF INTERVAL EDITOR (section 3) — generic: binary (device on/off)
+  // or rate (multi-colour tariff zones), both built on the same rich per-day model.
+  // ============================================================
+  _bindScheduleModal(){}
+  _openDeviceScheduleEditor(inst){
+    const schedule = ScheduleManager.normalize(inst.schedule, inst.def);
+    this._openScheduleEditor({
+      title: `🕐 ${inst.customName||I18n.deviceName(inst.def)}`,
+      mode: 'binary',
+      schedule: JSON.parse(JSON.stringify(schedule)),
+      onSave: (sched)=>{
+        this.objectManager.setSchedule(inst.id, sched);
+        this.projectManager.pushHistory();
+        this.questManager.markScheduleEdited();
+        this.petManager.awardScheduleSaved(inst.id);
+        this.questManager.checkMilestones(this._questCtx());
+        const fresh = this.objectManager.find(inst.id);
+        if (fresh) this.renderProperties(fresh);
+        this.log(`${I18n.t('sched.save')}: ${inst.customName||I18n.deviceName(inst.def)}`);
+      },
+    });
+  }
+  _openScheduleEditor(opts){
+    this._schedState = { schedule: opts.schedule, mode: opts.mode, rateOptions: opts.rateOptions||[], onSave: opts.onSave, selectedDay: this.simulationEngine.simDay };
+    document.getElementById('scheduleModalTitle').textContent = opts.title;
+    this._renderScheduleEditor();
+    document.getElementById('scheduleModal').classList.remove('hidden');
+  }
+  _renderScheduleEditor(){
+    const st = this._schedState;
+    const body = document.getElementById('scheduleModalBody');
+    const dayOrder = [1,2,3,4,5,6,0]; // Monday-first display, internal index stays 0=Sun..6=Sat
+    const preset = ScheduleManager.presets();
+    const isRate = st.mode==='rate';
+
+    const dayTabsHtml = dayOrder.map(d=>{
+      const count = (st.schedule.days[d]||[]).length;
+      return `<button class="sched-day-tab ${d===st.selectedDay?'active':''} ${count?'':'empty'}" data-day="${d}">${I18n.dayShort(d)}${count?` <span class="cnt">${count}</span>`:''}</button>`;
+    }).join('');
+
+    const intervals = st.schedule.days[st.selectedDay]||[];
+    const rowsHtml = intervals.map((iv,i)=>`
+      <div class="interval-row">
+        <input type="time" class="iv-start" data-i="${i}" value="${iv.start}">
+        <span>–</span>
+        <input type="time" class="iv-end" data-i="${i}" value="${iv.end}">
+        ${isRate ? `<select class="iv-rate" data-i="${i}">${st.rateOptions.map(r=>`<option value="${r.id}" ${iv.rate===r.id?'selected':''}>${r.label}</option>`).join('')}</select>` : ''}
+        <button class="iv-remove" data-i="${i}" title="${I18n.t('sched.removeInterval')}">✕</button>
+      </div>`).join('') || `<div class="pet-empty-note">${I18n.t('sched.noIntervals')}</div>`;
+
+    body.innerHTML = `
+      ${st.mode==='binary' ? `<div class="toggle-row"><span>${I18n.t('sched.active')}</span><label class="switch"><input type="checkbox" id="schedEnabledToggle" ${st.schedule.enabled?'checked':''}><span class="slider-tog"></span></label></div>` : ''}
+      <div class="sched-day-tabs">${dayTabsHtml}</div>
+      <div class="sched-quick-row">
+        <span class="sched-quick-lbl">${I18n.t('sched.applyToOthers')}:</span>
+        <button class="small-btn" data-preset="all">${I18n.t('sched.selectAll')}</button>
+        <button class="small-btn" data-preset="workdays">${I18n.t('sched.selectWorkdays')}</button>
+        <button class="small-btn" data-preset="weekend">${I18n.t('sched.selectWeekend')}</button>
+      </div>
+      <div class="sched-timeline">${this._scheduleTimelineHtml(intervals, isRate, st.rateOptions)}</div>
+      <div class="interval-list">${rowsHtml}</div>
+      <button class="small-btn" id="schedAddInterval">➕ ${I18n.t('sched.addInterval')}</button>
+      <div style="font-size:11px;color:var(--text-3);margin:8px 0">${I18n.t('sched.perDayHint')}</div>
+      <button class="primary-btn" id="schedSaveBtn" style="width:100%;margin-top:8px">${I18n.t('sched.save')}</button>`;
+
+    body.querySelectorAll('.sched-day-tab').forEach(b=>{
+      b.addEventListener('click', ()=>{ st.selectedDay = Number(b.dataset.day); this._renderScheduleEditor(); });
+    });
+    body.querySelectorAll('[data-preset]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        ScheduleManager.copyDayToOthers(st.schedule, st.selectedDay, preset[b.dataset.preset]);
+        this._renderScheduleEditor();
+      });
+    });
+    body.querySelectorAll('.iv-start,.iv-end').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const i = Number(inp.dataset.i);
+        intervals[i][inp.classList.contains('iv-start')?'start':'end'] = inp.value;
+        this._renderScheduleEditor();
+      });
+    });
+    body.querySelectorAll('.iv-rate').forEach(sel=>{
+      sel.addEventListener('change', ()=>{ intervals[Number(sel.dataset.i)].rate = sel.value; this._renderScheduleEditor(); });
+    });
+    body.querySelectorAll('.iv-remove').forEach(b=>{
+      b.addEventListener('click', ()=>{ ScheduleManager.removeInterval(st.schedule, st.selectedDay, Number(b.dataset.i)); this._renderScheduleEditor(); });
+    });
+    document.getElementById('schedAddInterval').addEventListener('click', ()=>{
+      const newIv = isRate ? { start:'08:00', end:'16:00', rate: st.rateOptions[0].id } : { start:'08:00', end:'16:00' };
+      ScheduleManager.addInterval(st.schedule, st.selectedDay, newIv);
+      this._renderScheduleEditor();
+    });
+    const enabledToggle = document.getElementById('schedEnabledToggle');
+    if (enabledToggle) enabledToggle.addEventListener('change', (e)=>{ st.schedule.enabled = e.target.checked; });
+    document.getElementById('schedSaveBtn').addEventListener('click', ()=>{
+      st.onSave(st.schedule);
+      document.getElementById('scheduleModal').classList.add('hidden');
+    });
+  }
+  /** 96 ticks (15-min resolution) across 24h for the selected day - reuses ScheduleManager's own
+   *  interval-membership test so the preview can never disagree with the actual simulation logic. */
+  _scheduleTimelineHtml(intervals, isRate, rateOptions){
+    const colorFor = (iv)=> isRate ? ((rateOptions.find(r=>r.id===iv.rate)||{}).color||'#4fd1c5') : 'var(--accent-good)';
+    let segs = '';
+    for (let m=0; m<1440; m+=15){
+      const hit = intervals.find(iv=> ScheduleManager._minuteInInterval(m, iv));
+      segs += `<div class="tl-seg" style="flex:1;background:${hit?colorFor(hit):'rgba(255,255,255,0.06)'}" title="${ScheduleManager.fromMinutes(m)}"></div>`;
+    }
+    return `<div class="timeline24">${segs}</div><div class="timeline-hours"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>`;
+  }
+
+  // ============================================================
+  // NEW SIMULATION WIZARD (section 29)
+  // ============================================================
+  _bindNewSimModal(){}
+  _openNewSimModal(){
+    const body = document.getElementById('newSimModalBody');
+    body.innerHTML = `
+      <div class="field-row"><label>${I18n.t('newsim.projectName')}</label><input type="text" id="nsName" value="${I18n.lang==='pl'?'Nowy Dom':'New Home'}"></div>
+      <div class="field-row"><label>${I18n.t('newsim.tariff')}</label>
+        <select id="nsTariff">${TariffManager.CODES.map(c=>`<option value="${c}">${c} — ${I18n.t(TariffManager.get(c).shortDescKey)}</option>`).join('')}</select>
+      </div>
+      <div style="font-size:11.5px;color:var(--accent-danger);margin:10px 0">${I18n.t('newsim.warning')}</div>
+      <button class="primary-btn" id="nsConfirm" style="width:100%">${I18n.t('newsim.confirmStart')}</button>`;
+    document.getElementById('nsConfirm').addEventListener('click', ()=>{
+      const name = document.getElementById('nsName').value;
+      const tariffCode = document.getElementById('nsTariff').value;
+      this.projectManager.startNewSimulation({ projectName:name, tariffCode });
+      if (window.EnergyRoom3D){ window.EnergyRoom3D.buildDemoMainRoom(); window.EnergyRoom3D.buildDemoGarage(); }
+      this.projectManager.pushHistory();
+      this.transformManager.deselect();
+      this.renderRoomTabs();
+      document.getElementById('newSimModal').classList.add('hidden');
+      document.getElementById('projectNameLabel').textContent = this.projectManager.projectName;
+      this.toast(`🆕 ${I18n.t('log.newProjectCreated')}`);
+    });
+    document.getElementById('newSimModal').classList.remove('hidden');
+  }
+
+  // ============================================================
+  // DASHBOARD: STATISTICS RANGE SELECTOR incl. year table (sections 7/8/20) & SAVINGS (section 13)
+  // ============================================================
+  _renderStatsPane(){
+    const wrap = document.getElementById('statsInner');
+    this._statsRangeSel = this._statsRangeSel || 'today';
+    const sim = this.simulationEngine, s = this.getEnergySettings();
+    const proj = this.analyticsManager.projections(sim.todayKWh, sim.todaySolarKWh, sim.todayCost);
+    let body = '';
+    if (this._statsRangeSel==='today'){
+      const bd = this.analyticsManager.breakdownToday(sim);
+      body = `
+        <div class="stats-grid">
+          <div class="stat-box"><div class="lbl">${I18n.t('stats.consumption')}</div><div class="val">${EnergyCalculator.fmtKWh(sim.todayKWh)}</div></div>
+          <div class="stat-box"><div class="lbl">${I18n.t('stats.production')}</div><div class="val good">${EnergyCalculator.fmtKWh(sim.todaySolarKWh)}</div></div>
+          <div class="stat-box"><div class="lbl">${I18n.t('stats.gridImport')}</div><div class="val">${EnergyCalculator.fmtKWh(sim.todayImportKWh)}</div></div>
+          <div class="stat-box"><div class="lbl">${I18n.t('stats.gridExport')}</div><div class="val good">${EnergyCalculator.fmtKWh(sim.todayExportKWh)}</div></div>
+        </div>
+        <h4>${I18n.t('stats.byCategory')}</h4>
+        ${bd.byCategory.map(c=>`<div class="cd-row"><span>${c.label}</span><b>${EnergyCalculator.fmtKWh(c.kWh)} (${c.pct.toFixed(0)}%)</b></div>`).join('') || `<div class="pet-empty-note">—</div>`}
+        <h4>${I18n.t('stats.byRoom')}</h4>
+        ${bd.byRoom.map(r=>{ const room=this.getRoom(r.id); return `<div class="cd-row"><span>${room?room.name:r.id}</span><b>${EnergyCalculator.fmtKWh(r.kWh)} (${r.pct.toFixed(0)}%)</b></div>`; }).join('') || `<div class="pet-empty-note">—</div>`}`;
+    } else if (this._statsRangeSel==='week'){
+      body = `<div class="stats-grid">
+        <div class="stat-box"><div class="lbl">${I18n.t('stats.consumption')}</div><div class="val">${EnergyCalculator.fmtKWh(proj.week)}</div></div>
+        <div class="stat-box"><div class="lbl">${I18n.t('stats.production')}</div><div class="val good">${EnergyCalculator.fmtKWh(proj.weekGen)}</div></div>
+        <div class="stat-box"><div class="lbl">${I18n.t('stats.cost')}</div><div class="val">${EnergyCalculator.fmtCost(proj.weekCost,s.currency)}</div></div>
+      </div>`;
+    } else if (this._statsRangeSel==='month'){
+      body = `<div class="stats-grid">
+        <div class="stat-box"><div class="lbl">${I18n.t('stats.consumption')}</div><div class="val">${EnergyCalculator.fmtKWh(proj.month)}</div></div>
+        <div class="stat-box"><div class="lbl">${I18n.t('stats.production')}</div><div class="val good">${EnergyCalculator.fmtKWh(proj.monthGen)}</div></div>
+        <div class="stat-box"><div class="lbl">${I18n.t('stats.cost')}</div><div class="val">${EnergyCalculator.fmtCost(proj.monthCost,s.currency)}</div></div>
+      </div>`;
+    } else {
+      const yb = this.analyticsManager.yearBreakdown();
+      body = `<table class="data-table"><thead><tr><th>${I18n.lang==='pl'?'Miesiąc':'Month'}</th><th>${I18n.t('stats.consumption')}</th><th>${I18n.t('stats.production')}</th><th>${I18n.t('stats.cost')}</th><th></th></tr></thead>
+        <tbody>${yb.months.map(mo=>`<tr><td>${mo.label}</td><td>${EnergyCalculator.fmtKWh(mo.consumedKWh)}</td><td>${EnergyCalculator.fmtKWh(mo.solarKWh)}</td><td>${EnergyCalculator.fmtCost(mo.cost,s.currency)}</td><td>${mo.isReal?`<span class="badge real">${I18n.t('common.real')}</span>`:mo.isPartial?`<span class="badge partial">~</span>`:`<span class="badge estimated">${I18n.t('common.estimate')}</span>`}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td><b>${yb.year}</b></td><td><b>${EnergyCalculator.fmtKWh(yb.totals.consumedKWh)}</b></td><td><b>${EnergyCalculator.fmtKWh(yb.totals.solarKWh)}</b></td><td><b>${EnergyCalculator.fmtCost(yb.totals.cost,s.currency)}</b></td><td></td></tr></tfoot>
+        </table>`;
+    }
+    wrap.innerHTML = `
+      <div class="stats-range-sel">
+        <button class="srange-btn ${this._statsRangeSel==='today'?'active':''}" data-r="today">${I18n.t('stats.range.today')}</button>
+        <button class="srange-btn ${this._statsRangeSel==='week'?'active':''}" data-r="week">${I18n.t('stats.range.week')}</button>
+        <button class="srange-btn ${this._statsRangeSel==='month'?'active':''}" data-r="month">${I18n.t('stats.range.month')}</button>
+        <button class="srange-btn ${this._statsRangeSel==='year'?'active':''}" data-r="year">${I18n.t('stats.range.year')}</button>
+      </div>
+      ${body}`;
+    wrap.querySelectorAll('.srange-btn').forEach(b=>{
+      b.addEventListener('click', ()=>{ this._statsRangeSel=b.dataset.r; this._renderStatsPane(); this.petManager.awardDataAnalyzed('stats_'+b.dataset.r, sim.simDayIndex); });
+    });
+  }
+
+  _renderSavingsPane(){
+    const wrap = document.getElementById('savingsInner');
+    const s = this.getEnergySettings();
+    const sav = this.analyticsManager.savingsAnalysis();
+    wrap.innerHTML = `
+      <div class="savings-compare">
+        <div class="savings-col"><div class="lbl">${I18n.t('stats.withoutPV')}</div><div class="val">${EnergyCalculator.fmtCost(sav.withoutPVMonth,s.currency)}/${I18n.t('common.month')}</div><div class="val2">${EnergyCalculator.fmtCost(sav.withoutPVYear,s.currency)}/${I18n.t('common.year')}</div></div>
+        <div class="savings-arrow">→</div>
+        <div class="savings-col good"><div class="lbl">${I18n.t('stats.withPV')}</div><div class="val">${EnergyCalculator.fmtCost(sav.withPVMonth,s.currency)}/${I18n.t('common.month')}</div><div class="val2">${EnergyCalculator.fmtCost(sav.withPVYear,s.currency)}/${I18n.t('common.year')}</div></div>
+      </div>
+      <div class="savings-headline">${sav.reductionPct.toFixed(1)}% ${I18n.t('stats.reduction').toLowerCase()}</div>
+      <div class="cd-row"><span>${I18n.t('stats.savings')} / ${I18n.t('common.month')}</span><b class="good-text">${EnergyCalculator.fmtCost(sav.savingMonth,s.currency)}</b></div>
+      <div class="cd-row"><span>${I18n.t('stats.savings')} / ${I18n.t('common.year')}</span><b class="good-text">${EnergyCalculator.fmtCost(sav.savingYear,s.currency)}</b></div>
+      <div class="cd-row"><span>${I18n.t('stats.lifetimeSavings')}</span><b class="good-text">${EnergyCalculator.fmtCost(sav.lifetimeSavingPLN,s.currency)}</b></div>
+      <div class="cd-row"><span>${I18n.t('stats.gridImport')} (${I18n.t('common.since')})</span><b>${EnergyCalculator.fmtKWh(sav.lifetimeImportKWh)}</b></div>
+      <div class="cd-row"><span>${I18n.t('stats.gridExport')} (${I18n.t('common.since')})</span><b>${EnergyCalculator.fmtKWh(sav.lifetimeExportKWh)}</b></div>`;
+  }
 }
+

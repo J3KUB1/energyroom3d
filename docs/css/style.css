@@ -489,3 +489,131 @@ select.std-select, input.std-input{ background:var(--bg-raised); border:1px soli
   .dash-cards{ grid-template-columns:1fr 1fr; }
   #leftPanel, #rightPanel{ width:90vw; }
 }
+
+/* ============================================================
+   ADDITIONS — language, tariffs, schedule editor, PV install,
+   pet tips/quests, stats range/year table, savings, period compare
+   ============================================================ */
+
+/* language switch (section 1) */
+.lang-switch{ display:flex; gap:6px; }
+.lang-btn{ background:var(--bg-raised); border:1px solid var(--border); border-radius:8px; padding:6px 14px; font-size:12px; font-weight:700; color:var(--text-2); cursor:pointer; transition:.15s; }
+.lang-btn:hover{ border-color:var(--border-strong); color:var(--text-1); }
+.lang-btn.active{ background:var(--accent-data); color:#07231f; border-color:var(--accent-data); }
+.settings-section-h{ font-family:var(--font-display); font-size:12px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px; }
+
+/* tariffs (section 2) */
+.tariff-badge.peak{ background:rgba(255,107,107,0.15); color:var(--accent-danger); }
+.tariff-code-pill{ font-size:9.5px; font-weight:800; padding:2px 6px; border-radius:6px; background:var(--bg-raised-2); border:1px solid var(--border); margin-left:4px; }
+.tariff-detail-box{ background:var(--bg-raised); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin:8px 0 10px; font-size:12px; }
+.tariff-sched-line{ padding:3px 0; color:var(--text-2); }
+.tariff-sched-line b{ color:var(--text-1); }
+
+/* schedule / rate interval editor (section 3) */
+.sched-day-tabs{ display:flex; gap:5px; margin:12px 0 10px; flex-wrap:wrap; }
+.sched-day-tab{ flex:1; min-width:38px; background:var(--bg-raised); border:1px solid var(--border); border-radius:8px; padding:8px 4px; font-size:11px; font-weight:700; color:var(--text-2); cursor:pointer; transition:.15s; }
+.sched-day-tab:hover{ border-color:var(--border-strong); }
+.sched-day-tab.active{ background:var(--accent-data); color:#07231f; border-color:var(--accent-data); }
+.sched-day-tab.empty{ opacity:0.55; }
+.sched-day-tab .cnt{ font-size:9px; opacity:0.85; }
+.sched-quick-row{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+.sched-quick-lbl{ font-size:11px; color:var(--text-3); margin-right:2px; }
+.sched-quick-row .small-btn{ width:auto; margin-top:0; }
+.sched-timeline{ margin-bottom:14px; }
+.timeline-hours{ display:flex; justify-content:space-between; font-size:9.5px; color:var(--text-3); margin-top:4px; font-family:var(--font-mono); }
+.interval-list{ display:flex; flex-direction:column; gap:7px; margin-bottom:8px; }
+.interval-row{ display:flex; align-items:center; gap:8px; background:var(--bg-raised); border:1px solid var(--border); border-radius:9px; padding:7px 10px; }
+.interval-row input[type=time]{ background:var(--bg-raised-2); border:1px solid var(--border); border-radius:7px; padding:5px 7px; color:var(--text-1); font-family:var(--font-mono); font-size:12px; }
+.interval-row select{ background:var(--bg-raised-2); border:1px solid var(--border); border-radius:7px; padding:5px 7px; font-size:11.5px; flex:1; }
+.interval-row span{ color:var(--text-3); }
+.iv-remove{ margin-left:auto; background:none; border:none; color:var(--text-3); cursor:pointer; font-size:13px; padding:2px 6px; border-radius:6px; }
+.iv-remove:hover{ color:var(--accent-danger); background:rgba(255,107,107,0.1); }
+
+/* PV install mode (sections 14/15) */
+#btnPvInstall.active{ color:#3a2a06; background:linear-gradient(180deg, var(--accent-power), #d69233); border-color:var(--accent-power); }
+.pv-install-banner{ position:fixed; left:50%; transform:translateX(-50%); bottom:96px; z-index:40; background:var(--bg-panel-solid); border:1px solid var(--accent-power); border-radius:14px; padding:12px 18px; display:flex; align-items:center; gap:16px; box-shadow:0 12px 32px rgba(0,0,0,0.45); max-width:min(760px,92vw); flex-wrap:wrap; }
+.pv-install-text{ font-size:12.5px; color:var(--text-2); display:flex; flex-direction:column; gap:2px; max-width:420px; }
+.pv-install-text b{ color:var(--accent-power); }
+.pv-install-stats{ font-size:12px; color:var(--text-2); white-space:nowrap; }
+.pv-install-stats b{ color:var(--text-1); }
+#pvInstallFinishBtn{ width:auto; padding:9px 16px; margin-left:auto; }
+.aim-bar{ height:8px; border-radius:5px; background:var(--bg-raised-2); overflow:hidden; margin:6px 0; }
+.aim-fill{ height:100%; transition:width .3s ease; }
+
+/* pet: tabs, tips, quests, unlocks (sections 16-19) */
+.pet-tip-dot{ position:absolute; top:-2px; left:-2px; width:11px; height:11px; border-radius:50%; background:var(--accent-power); box-shadow:0 0 8px rgba(255,182,72,0.8); animation:pet-pulse 1.4s ease-in-out infinite; }
+.pet-tabs{ display:flex; gap:4px; margin-top:16px; border-bottom:1px solid var(--border); }
+.pet-tab{ flex:1; background:none; border:none; color:var(--text-3); font-size:11px; font-weight:700; padding:8px 4px; cursor:pointer; border-bottom:2px solid transparent; transition:.15s; }
+.pet-tab:hover{ color:var(--text-1); }
+.pet-tab.active{ color:var(--accent-data); border-bottom-color:var(--accent-data); }
+.pet-tab-pane{ padding-top:10px; max-height:220px; overflow-y:auto; }
+.pet-empty-note{ font-size:11.5px; color:var(--text-3); padding:8px 0; }
+.advisor-tip{ font-size:12px; line-height:1.45; padding:8px 9px; border-radius:8px; background:var(--bg-raised); margin-bottom:6px; display:flex; gap:6px; }
+.advisor-tip.warning{ border-left:3px solid var(--accent-power); }
+.advisor-tip.info{ border-left:3px solid var(--accent-data); }
+.advisor-tip.tip{ border-left:3px solid var(--accent-good); }
+.quest-item{ background:var(--bg-raised); border-radius:9px; padding:9px 10px; margin-bottom:7px; }
+.quest-item.done{ opacity:0.75; }
+.quest-item-head{ display:flex; justify-content:space-between; font-size:12px; font-weight:600; }
+.quest-xp{ color:var(--accent-power); font-size:11px; }
+.quest-desc{ font-size:11px; color:var(--text-3); margin-top:3px; }
+.quest-bar{ height:5px; border-radius:4px; background:var(--bg-raised-2); overflow:hidden; margin-top:6px; }
+.quest-bar-fill{ height:100%; background:linear-gradient(90deg, var(--accent-data), var(--accent-good)); transition:width .3s ease; }
+.unlock-item{ display:flex; justify-content:space-between; font-size:11.5px; padding:7px 0; border-bottom:1px solid var(--border); }
+.unlock-item.next{ color:var(--text-3); }
+.unlock-lvl{ font-size:10px; color:var(--text-3); }
+.pet-avatar-big.pet-anim-spin{ animation:pet-spin 0.8s ease-in-out; }
+.pet-avatar-big.pet-anim-pulse{ animation:pet-pulse 0.8s ease-in-out; }
+.pet-avatar-big.pet-anim-burst{ animation:pet-burst 0.9s ease-in-out; }
+.pet-avatar.pet-anim-shimmer, .pet-avatar-big.pet-anim-shimmer{ animation:pet-shimmer 1s ease-in-out; }
+.pet-avatar.pet-anim-aura, .pet-avatar-big.pet-anim-aura{ animation:pet-aura 1s ease-in-out; }
+.pet-avatar.pet-anim-legend, .pet-avatar-big.pet-anim-legend{ animation:pet-burst 1.2s ease-in-out 2; }
+@keyframes pet-shimmer{ 0%,100%{ filter:brightness(1);} 50%{ filter:brightness(1.8) drop-shadow(0 0 10px currentColor);} }
+@keyframes pet-aura{ 0%,100%{ box-shadow:0 0 0 rgba(103,200,255,0);} 50%{ box-shadow:0 0 22px rgba(103,200,255,0.8);} }
+
+/* dashboard card drill-down (sections 4/7/20/21) */
+.dash-card{ cursor:pointer; }
+.dash-card.expanded{ border-color:var(--accent-data); box-shadow:0 0 0 1px var(--accent-data) inset; }
+.dash-card-detail{ background:var(--bg-raised); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:-6px 0 18px; }
+.dash-card-detail h4{ font-size:12px; color:var(--text-3); text-transform:uppercase; margin-bottom:8px; letter-spacing:0.04em; }
+.cd-row{ display:flex; justify-content:space-between; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--border); }
+.cd-row:last-child{ border-bottom:none; }
+.cd-sub{ font-size:11px; color:var(--text-3); text-transform:uppercase; margin:10px 0 4px; letter-spacing:0.04em; }
+
+/* stats range selector + year table (sections 7/8) */
+.stats-range-sel{ display:flex; gap:6px; margin-bottom:14px; }
+.srange-btn{ flex:1; background:var(--bg-raised); border:1px solid var(--border); border-radius:9px; padding:9px; font-size:12px; font-weight:700; color:var(--text-2); cursor:pointer; transition:.15s; }
+.srange-btn:hover{ border-color:var(--border-strong); }
+.srange-btn.active{ background:var(--accent-data); color:#07231f; border-color:var(--accent-data); }
+.stats-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+.stat-box{ background:var(--bg-raised); border:1px solid var(--border); border-radius:11px; padding:12px; }
+.stat-box .lbl{ font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.04em; }
+.stat-box .val{ font-family:var(--font-display); font-size:18px; font-weight:700; margin-top:5px; }
+.stat-box .val.good{ color:var(--accent-good); }
+.badge.real{ background:rgba(62,231,155,0.15); color:var(--accent-good); }
+.badge.partial{ background:rgba(255,182,72,0.15); color:var(--accent-power); }
+
+/* savings analysis (section 13) */
+.savings-compare{ display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+.savings-col{ flex:1; background:var(--bg-raised); border:1px solid var(--border); border-radius:12px; padding:14px; text-align:center; }
+.savings-col.good{ border-color:var(--accent-good); }
+.savings-col .lbl{ font-size:10.5px; color:var(--text-3); text-transform:uppercase; }
+.savings-col .val{ font-family:var(--font-display); font-size:19px; font-weight:700; margin-top:6px; }
+.savings-col .val2{ font-size:12px; color:var(--text-3); margin-top:3px; }
+.savings-col.good .val{ color:var(--accent-good); }
+.savings-arrow{ font-size:22px; color:var(--text-3); }
+.savings-headline{ font-family:var(--font-display); font-size:24px; font-weight:800; color:var(--accent-good); text-align:center; margin-bottom:16px; }
+.good-text{ color:var(--accent-good); }
+
+/* period vs device comparison sub-tabs (section 23) */
+.sub-tabs{ display:flex; gap:8px; margin-bottom:14px; }
+.sub-tab{ background:var(--bg-raised); border:1px solid var(--border); border-radius:9px; padding:8px 14px; font-size:12px; font-weight:700; color:var(--text-2); cursor:pointer; }
+.sub-tab.active{ background:var(--accent-data); color:#07231f; border-color:var(--accent-data); }
+
+@media (max-width: 860px){
+  .stats-grid{ grid-template-columns:1fr 1fr; }
+  .pv-install-banner{ flex-direction:column; align-items:flex-start; bottom:76px; }
+  #pvInstallFinishBtn{ margin-left:0; width:100%; }
+  .savings-compare{ flex-direction:column; }
+  .savings-arrow{ transform:rotate(90deg); }
+}

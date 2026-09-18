@@ -1,13 +1,20 @@
 /**
  * MAIN — application bootstrap.
  * Builds the manager graph, sets up the two-room demo house (bedroom +
- * garage with solar panels), and starts the app.
+ * garage), and starts the app. As of this version the garage roof
+ * starts with NO solar panels pre-installed (spec section 14) - the
+ * player installs their own via the "PV install mode" toggle in the
+ * top bar, which is what makes panel count/orientation/tilt a genuine
+ * choice with genuine consequences (section 15) rather than a fixed
+ * starting fixture.
  * Unity mapping: a single "GameBootstrap" MonoBehaviour that wires up
  * all the manager singletons on Awake().
  */
 (function(){
+  I18n.init();
+
   let houseState = defaultHouseState();
-  let energySettings = { ...DEFAULT_ENERGY_SETTINGS };
+  let energySettings = { ...DEFAULT_ENERGY_SETTINGS, tariffPrices: JSON.parse(JSON.stringify(DEFAULT_ENERGY_SETTINGS.tariffPrices)), tariffSchedules: JSON.parse(JSON.stringify(DEFAULT_ENERGY_SETTINGS.tariffSchedules)) };
 
   const container = document.getElementById('threeContainer');
   const sceneManager = new SceneManager(container);
@@ -38,19 +45,24 @@
         p.group.position.set(p.position.x, p.position.y, p.position.z);
         p.group.rotation.set(p.rotation.x, p.rotation.y, p.rotation.z);
       }
+      objectManager.computePVOrientation(p); // roof pitch is part of the world transform - refresh after any reattach
     }
   }
   rebuildHouse();
 
   const automationManager = new AutomationManager({ getInstances: ()=>objectManager.getDevices() });
-  const weatherManager = new WeatherEventManager({});
+  let simulationEngine; // forward-declared so WeatherSystem's getSimDate closure can reference it once assigned below
+  const weatherManager = new WeatherSystem({ getSimDate: ()=> simulationEngine ? simulationEngine.simDate : new Date() });
   const petManager = new PetManager({});
+  const questManager = new QuestManager({});
+  const advisorEngine = new AdvisorEngine();
 
-  const simulationEngine = new SimulationEngine({
+  simulationEngine = new SimulationEngine({
     getInstances: ()=>objectManager.getAll().filter(i=>i.kind==='device'),
     getSolarInstances: ()=>objectManager.getAll().filter(i=>i.kind==='solar'),
     getBatteryInstances: ()=>objectManager.getAll().filter(i=>i.kind==='battery'),
-    getTariff: ()=>energySettings,
+    getSettings: ()=>energySettings,
+    getStartDate: ()=> new Date(energySettings.startDateISO || Date.now()),
     automationManager,
     weatherManager,
     onMinuteTick: (sim)=>{
@@ -59,7 +71,7 @@
         sceneManager.setDayNight(hour);
         const range = document.getElementById('dayNightRange');
         if (range){ range.value = hour.toFixed(1); document.getElementById('dayNightLabel').textContent = sim.clockLabel; }
-        // the network pet is "fed" by data-bit trickle from active network/computer devices
+        // the companion is "fed" by data-bit trickle from active network/computer devices
         const activeNet = objectManager.getDevices().filter(d =>
           (d.def.category==='smarthome' || d.def.category==='computers') &&
           d.runtime.state && d.runtime.state!=='off' && d.runtime.state!=='standby').length;
@@ -73,6 +85,7 @@
     getSolarInstances: ()=>objectManager.getSolar(),
     getBatteryInstances: ()=>objectManager.getBattery(),
     getSettings: ()=>energySettings,
+    getSim: ()=>simulationEngine,
   });
 
   const projectManager = new ProjectManager({
@@ -82,12 +95,14 @@
     getEnergySettings: ()=>energySettings,
     setEnergySettings: (v)=>{ energySettings = v; },
     automationManager,
+    simulationEngine,
     rebuildHouse,
   });
 
   const ui = new UIManager({
     sceneManager, roomBuilder, objectManager, transformManager, simulationEngine,
     analyticsManager, automationManager, projectManager, weatherManager, petManager,
+    questManager, advisorEngine,
     getHouseState: ()=>houseState, setHouseState: (v)=>{ houseState=v; },
     getActiveRoom, getRoom,
     getEnergySettings: ()=>energySettings, setEnergySettings: (v)=>{ energySettings=v; },
@@ -154,26 +169,11 @@
     place('garageshelf', 0.5, 0.7, Math.PI/2, true, null, 'garage');
     place('ceiling_lamp', W*0.3, L*0.5, 0, false, null, 'garage');
     place('smart_plug', 0.15, L-0.3, 0, false, 1.0, 'garage');
-
-    // solar panels on the roof - laid out in a simple grid, flush with the tilted roof plane.
-    // addSolar auto-parents to the garage's roof group (via ObjectManager's getRoofGroup hook),
-    // so we only need to give it roof-local x/z; y defaults to the roof surface automatically.
-    const roof = roomBuilder.roofGroups['garage'];
-    if (roof){
-      const cols = 3, rows = 2;
-      const panelW = 1.0, panelL = 1.65, gap = 0.06;
-      const spanW = cols*panelW + (cols-1)*gap;
-      const spanL = rows*panelL + (rows-1)*gap;
-      const startX = -spanW/2 + panelW/2;
-      const startZ = -spanL/2 + panelL/2 + 0.05;
-      for (let r=0;r<rows;r++){
-        for (let c=0;c<cols;c++){
-          const lx = startX + c*(panelW+gap), lz = startZ + r*(panelL+gap);
-          objectManager.addSolar('panel_400', { x:lx, y:roof.userData.surfaceY, z:lz }, 'garage');
-        }
-      }
-    }
-    // one battery in the corner, on the floor next to the workbench
+    // Section 14: the roof starts EMPTY. No solar panels are pre-installed - the player places
+    // their own via "PV install mode" (UIManager), which is also what gives panel count/
+    // orientation/tilt (section 15) real, felt consequences instead of a fixed starting fixture.
+    // One battery in the corner, on the floor next to the workbench - PV panels aren't the only
+    // thing here, and a battery with nothing to charge from yet is a fine, honest starting state.
     place('battery_10', W-0.35, L-1.9, Math.PI/2, false, null, 'garage', 'battery');
   }
 
@@ -181,6 +181,8 @@
   if (hasSaved){
     projectManager.loadLocal();
   } else {
+    energySettings.startDateISO = new Date().toISOString();
+    simulationEngine._syncCalendarEpoch(); // re-anchor now that the definitive start date is set (see section 3 day-of-week note in SimulationEngine)
     buildDemoMainRoom();
     buildDemoGarage();
   }
@@ -188,5 +190,5 @@
 
   sceneManager.setView('home');
 
-  window.EnergyRoom3D = { sceneManager, roomBuilder, environmentBuilder, objectManager, transformManager, simulationEngine, analyticsManager, automationManager, projectManager, weatherManager, petManager, ui };
+  window.EnergyRoom3D = { sceneManager, roomBuilder, environmentBuilder, objectManager, transformManager, simulationEngine, analyticsManager, automationManager, projectManager, weatherManager, petManager, questManager, advisorEngine, ui, buildDemoMainRoom, buildDemoGarage };
 })();
