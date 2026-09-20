@@ -154,7 +154,7 @@ class PetManager {
       this.xp -= this.xpToNext;
       this.level++;
       this.onLevelUp(this.stage, this.level);
-      this.onLog(`🐾 ${this.name} ${I18n.t('pet.leveledUp', { level: this.level, stage: this.stage.name })}`);
+      this.onLog(`🐾 ${this.name} ${I18n.t('pet.leveledUp', { level: this.level, stage: I18n.petStage(this.stage) })}`);
     }
     this._save();
     this.onChange(this);

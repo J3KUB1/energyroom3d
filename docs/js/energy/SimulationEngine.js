@@ -15,9 +15,12 @@
  *    single flat/dual switch;
  *  - ticks WeatherSystem every simulated minute (continuous sky
  *    condition) in addition to its daily extreme-event roll;
- *  - supports a user-chosen PV usage priority (home-first vs
- *    battery-first) that changes how surplus PV is actually
- *    allocated, not just relabels the same numbers;
+ *  - supports a user-chosen, fully ordered 3-slot PV usage priority
+ *    (any permutation of Home / Battery / Grid) that changes how PV
+ *    output is actually allocated minute by minute, honouring battery
+ *    limits, export/import limits, grid outages and PV curtailment;
+ *  - reduces every panel's output by its own geometric shading
+ *    (ShadeModel: buildings, roofs, trees, other panels);
  *  - accumulates category/room/import/export breakdowns for the
  *    "drill into a number" UI, and keeps a capped day-by-day HISTORY
  *    so weekly/monthly/yearly views can show genuinely-played data
@@ -27,7 +30,11 @@
  * Update() with its own accumulator, independent of rendering.
  */
 class SimulationEngine {
-  constructor({ getInstances, getSolarInstances, getBatteryInstances, getSettings, getStartDate, onMinuteTick, onLog, onDayRollover, automationManager, weatherManager }){
+  constructor({ getInstances, getSolarInstances, getBatteryInstances, getSettings, getStartDate, onMinuteTick, onLog, onDayRollover, automationManager, weatherManager, electrical }){
+    this.electrical = electrical || null;   // ElectricalSystem: circuits, breakers, cables, sockets (Stage 2)
+    this.onElectricalEvent = ()=>{};        // trips / cable damage -> main.js (log, toast, pet)
+    this.currentLossW = 0;                  // I^2 R heat in the installation's cables (billed energy)
+    this.todayLossKWh = 0;
     this.getInstances = getInstances;
     this.getSolarInstances = getSolarInstances || (()=>[]);
     this.getBatteryInstances = getBatteryInstances || (()=>[]);
@@ -51,6 +58,12 @@ class SimulationEngine {
     this.currentPowerW = 0;      // total consumption, all rooms
     this.currentGenW = 0;        // total PV generation, all rooms
     this.currentBatteryW = 0;    // +charging (draws from surplus) / -discharging (supplies deficit)
+    this.gridOnline = true;      // false during a blackout: no import, no export (see section 16 / Etap 6)
+    this.currentGenPotentialW = 0; // what the panels COULD deliver (after shading/weather), before curtailment
+    this.currentCurtailedW = 0;  // PV that no sink could take this minute (export limit, full battery, grid down)
+    this.currentUnservedW = 0;   // load nobody could supply (grid down + battery empty) - drives load shedding
+    this.flows = { pvToHome:0, pvToBattery:0, pvToGrid:0, batteryToHome:0, gridToHome:0, curtailed:0, unserved:0 };
+    this.todayCurtailedKWh = 0;
     this.hourlyKWh = new Array(24).fill(0);
     this.hourlyGenKWh = new Array(24).fill(0);
     this.todayKWh = 0;           // consumption
@@ -122,7 +135,7 @@ class SimulationEngine {
   get minuteOfDay(){ return this.absMin % 1440; }
   get clockLabel(){ return ScheduleManager.fromMinutes(this.minuteOfDay); }
   /** Net power actually drawn from (positive) or exported to (negative) the grid, after battery. */
-  get netPowerW(){ return this.currentPowerW - this.currentGenW + this.currentBatteryW; }
+  get netPowerW(){ return this.currentPowerW - this.currentUnservedW - this.currentGenW + this.currentBatteryW; }
   get activeWeather(){ return this.weatherManager ? this.weatherManager.active : null; }
   get skyCondition(){ return this.weatherManager ? this.weatherManager.condition : null; }
 
@@ -150,7 +163,9 @@ class SimulationEngine {
   skipDays(n){
     const target = this.absMin + n*1440;
     let guard = 0;
-    while (this.absMin < target && guard < 60*1440*400){ this._stepOneMinute(); guard++; }
+    this._bulk = true;   // fast-forward: the installation skips publishing UI-only values every minute
+    try { while (this.absMin < target && guard < 60*1440*400){ this._stepOneMinute(); guard++; } }
+    finally { this._bulk = false; }
     this._recomputeInstant(false);
   }
 
@@ -200,6 +215,7 @@ class SimulationEngine {
     this.todayKWhByCategory = {}; this.todayKWhByRoom = {};
     this.todayImportKWh = 0; this.todayExportKWh = 0;
     this.todayBatteryChargeKWh = 0; this.todayBatteryDischargeKWh = 0;
+    this.todayCurtailedKWh = 0; this.todayLossKWh = 0;
     this.todayMorningKWh = 0;
   }
 
@@ -211,8 +227,11 @@ class SimulationEngine {
     const wx = this.weatherManager ? this.weatherManager.getMultipliers() : { solarMult:1, climateMult:1, heatingMult:1 };
     let total = 0;
     const hour = Math.floor(this.minuteOfDay/60);
-    for (const inst of instances){
-      const prevState = inst.runtime.state;
+
+    // ---- pass 1: what every device WANTS to draw (schedule / automation / manual switch / weather) ----
+    const wanted = new Array(instances.length);
+    for (let i = 0; i < instances.length; i++){
+      const inst = instances[i];
       let state, powerW;
       if (inst.manualOverride === 'off'){
         // user's direct power switch always wins - a forced-off device draws nothing, full stop
@@ -235,6 +254,26 @@ class SimulationEngine {
         if (inst.def.category==='climate') powerW *= wx.climateMult;
         else if (inst.def.category==='heating') powerW *= wx.heatingMult;
       }
+      wanted[i] = { state, powerW };
+    }
+
+    // ---- pass 2: the installation decides what actually arrives (sockets, circuits, breakers, cables) ----
+    let lossW = 0, elec = null;
+    if (this.electrical){
+      elec = this.electrical.resolve(instances.map((inst, i) => ({ id:inst.id, desiredW:wanted[i].powerW, connected:inst.connected, plugTo:inst.plugTo })), { accumulate, publish: !this._bulk });
+      lossW = elec.lossW;
+    }
+    this.currentLossW = lossW;
+
+    // ---- pass 3: apply, count, accumulate ----
+    for (let i = 0; i < instances.length; i++){
+      const inst = instances[i];
+      const prevState = inst.runtime.state;
+      let { state, powerW } = wanted[i];
+      const er = elec ? elec.devices.get(inst.id) : null;
+      inst.runtime.powerStatus = er ? er.status : 'ok';
+      inst.runtime.voltageV = er ? er.voltageV : 230;
+      if (er && er.powerW < powerW - 1e-9){ powerW = er.powerW; if (powerW <= 0) state = 'off'; } // cut by the installation
       inst.runtime.state = state;
       inst.runtime.powerW = powerW;
       total += powerW;
@@ -256,17 +295,43 @@ class SimulationEngine {
         this.onLog(I18n.t('log.deviceStateChange', { name: inst.customName||inst.def.name, state: I18n.deviceState(state) }));
       }
     }
+    // cable losses are real energy drawn from the grid: they are part of the household total and the bill
+    if (lossW > 0){
+      total += lossW;
+      if (accumulate){
+        const kwh = EnergyCalculator.wattsMinutesToKWh(lossW, 1);
+        this.todayKWh += kwh; this.todayLossKWh += kwh;
+        this.todayKWhByCategory['installation'] = (this.todayKWhByCategory['installation']||0) + kwh;
+        this.hourlyKWh[hour] += kwh;
+      }
+    }
     this.currentPowerW = total;
 
-    // ---- Solar generation ----
-    let gen = 0;
+    // ---- Solar generation: per-panel potential (incidence x weather x SHADING) ----
     const panels = this.getSolarInstances();
     const doy = this.dayOfYear;
-    for (const p of panels){
-      const w = SolarCalculator.resolve(p, this.absMin, doy, wx.solarMult);
+    if (SolarCalculator.shadeModel) SolarCalculator.shadeModel.setSeason(this.season);
+    const panelW = new Array(panels.length);
+    let pvPotential = 0;
+    for (let i = 0; i < panels.length; i++){
+      const p = panels[i];
+      const d = SolarCalculator.resolveDetailed(p, this.absMin, doy, wx.solarMult);
+      panelW[i] = d.w; pvPotential += d.w;
+      p.runtime.directAccess = d.direct;   // 0..1 direct-beam access (1 = no shade)
+      p.runtime.sunlight = d.sunlight;     // 0..1 effective light incl. diffuse
+      p.runtime.potentialW = d.w;
+    }
+    this.currentGenPotentialW = pvPotential;
+
+    // ---- Allocation of PV between home / battery / grid in the user's 3-slot order ----
+    const alloc = this._allocate(total, pvPotential, s, accumulate);
+    const gen = Math.max(0, pvPotential - alloc.curtailedW);   // PV actually delivered
+    const scale = pvPotential > 0 ? gen / pvPotential : 0;
+    for (let i = 0; i < panels.length; i++){
+      const p = panels[i];
+      const w = panelW[i] * scale;
       p.runtime.powerW = -w; // negative = producing
-      p.runtime.state = w > 1 ? 'generating' : 'idle';
-      gen += w;
+      p.runtime.state = !p.connected ? 'off' : (w > 1 ? 'generating' : 'idle');
       if (accumulate){
         const kwh = EnergyCalculator.wattsMinutesToKWh(w, 1);
         this.todaySolarKWh += kwh;
@@ -274,16 +339,18 @@ class SimulationEngine {
       }
     }
     this.currentGenW = gen;
-
-    // ---- Battery: allocation depends on the user's chosen PV-usage priority (section 6) ----
-    const battTotalW = this._resolvePVAllocation(total, gen, s.pvPriority, accumulate);
-    this.currentBatteryW = battTotalW;
+    this.currentBatteryW = alloc.batteryNetW;
+    this.currentCurtailedW = alloc.curtailedW;
+    this.currentUnservedW = alloc.unservedW;
+    this.flows = alloc.flows;
+    if (accumulate) this.todayCurtailedKWh += EnergyCalculator.wattsMinutesToKWh(alloc.curtailedW, 1);
+    const battTotalW = alloc.batteryNetW;
 
     if (accumulate){
       const tariffSchedule = (s.tariffSchedules && s.tariffSchedules[s.tariffCode]) || tariffMeta.buildDefaultSchedule();
       const prices = (s.tariffPrices && s.tariffPrices[s.tariffCode]) || tariffMeta.defaultPrices;
       const rate = TariffManager.priceAt(tariffMeta, prices, tariffSchedule, this.absMin);
-      const netW = total - gen + battTotalW;
+      const netW = total - this.currentUnservedW - gen + battTotalW;
       const netKw = netW / 1000;
       let minuteCost;
       if (netW >= 0){
@@ -298,7 +365,7 @@ class SimulationEngine {
       // what it *would* have cost with no PV/battery at all, vs what it actually cost this minute
       const baselineCost = (total/1000) * (1/60) * rate;
       this.totalSavedPLN += Math.max(0, baselineCost - minuteCost);
-      this.totalConsumedKWh += EnergyCalculator.wattsMinutesToKWh(total,1);
+      this.totalConsumedKWh += EnergyCalculator.wattsMinutesToKWh(total - this.currentUnservedW,1);
       this.totalSolarKWh += EnergyCalculator.wattsMinutesToKWh(gen,1);
       if (netW>0) this.totalImportKWh += EnergyCalculator.wattsMinutesToKWh(netW,1);
       else this.totalExportKWh += EnergyCalculator.wattsMinutesToKWh(-netW,1);
@@ -312,89 +379,103 @@ class SimulationEngine {
     this.onMinuteTick(this);
   }
 
+  /** All 6 orderings of the three PV sinks. */
+  static get PV_SINKS(){ return ['home','battery','grid']; }
+
+  /** Normalises a saved/legacy PV priority into a valid 3-slot order.
+   *  `order` (array) wins if it is a permutation of home/battery/grid; otherwise the legacy
+   *  two-value `pvPriority` maps to: home_first -> home,battery,grid ; battery_first -> battery,home,grid. */
+  static normalizePvOrder(order, legacyPriority){
+    const sinks = SimulationEngine.PV_SINKS;
+    if (Array.isArray(order) && order.length === 3 && sinks.every(x => order.includes(x))) return order.slice();
+    if (legacyPriority === 'battery_first') return ['battery','home','grid'];
+    return ['home','battery','grid'];
+  }
+
   /**
-   * Allocates PV production between home/battery/grid according to the user's chosen
-   * priority (section 6). 'home_first' (default) reproduces the original always-optimize
-   * self-consumption behaviour unchanged. 'battery_first' lets the battery claim PV output
-   * even while the home still has an unmet need, which is a genuinely different outcome:
-   * the home's remaining deficit is then covered by the grid THIS MINUTE rather than by
-   * battery discharge (a battery can't simultaneously charge and discharge).
-   * Either branch returns net battery power (+charging/-discharging); the grid balance
-   * (this.netPowerW = total - gen + battery) is a plain energy-conservation identity that
-   * holds no matter which branch ran, so callers never need to know which mode is active.
+   * ONE allocator for everything PV/battery/grid related (replaces the previous two-branch
+   * home_first / battery_first code; home_first/battery_first are now just two of six orders).
+   *
+   * PV output is offered to the three sinks in the user's order:
+   *   home    - covers the current load
+   *   battery - charges connected batteries (power-, headroom- and efficiency-limited)
+   *   grid    - exports (capped by the export limit, impossible during a blackout)
+   * PV no sink can take is CURTAILED (inverter derates) - never invented, never silently exported.
+   * Whatever load PV did not cover is then served by battery discharge (only in a minute in which no
+   * battery is charging, down to the reserve SOC) and finally by grid import (capped by the import
+   * limit, impossible during a blackout).  Load nobody can serve is reported as `unservedW`.
+   * Returns { batteryNetW (+charging/-discharging), curtailedW, unservedW, flows }.
+   * Energy balance identity:  grid import - grid export = load - unserved - pvDelivered + batteryNet.
    */
-  _resolvePVAllocation(loadW, genW, priority, accumulate){
-    if (priority === 'battery_first'){
-      return this._chargeBatteriesFromPV(genW, accumulate);
-    }
-    return this._resolveBatteries(loadW - genW, accumulate);
-  }
+  _allocate(loadW, pvW, s, accumulate){
+    const order = SimulationEngine.normalizePvOrder(s.pvOrder, s.pvPriority);
+    const gridUp = this.gridOnline !== false;
+    const cap = v => (v == null || v === '' || !isFinite(+v)) ? Infinity : Math.max(0, +v);
+    const exportCap = gridUp ? cap(s.exportLimitW) : 0;
+    const importCap = gridUp ? cap(s.importLimitW) : 0;
+    const reserve = Math.max(0, Math.min(90, +s.batteryReservePct || 0)) / 100;
 
-  /** 'battery_first' mode: batteries draw straight from gross PV output, in sequence, before home gets any of it. */
-  _chargeBatteriesFromPV(pvAvailableW, accumulate){
-    let pvLeft = Math.max(0, pvAvailableW);
-    let battTotal = 0;
+    const infos = [];
     for (const b of this.getBatteryInstances()){
-      if (!b.connected){ b.runtime.powerW = 0; b.runtime.state = 'off'; continue; }
-      const cap = b.def.capacityKWh;
-      const eff = b.def.efficiency || 0.92;
-      const soc = (b.runtime.socKWh != null) ? b.runtime.socKWh : cap*0.5;
-      const headroomKWh = Math.max(0, cap - soc);
-      const maxByHeadroom = headroomKWh * 1000 * 60 / eff;
-      const chargeW = Math.min(pvLeft, b.def.maxChargeW, maxByHeadroom);
-      if (accumulate && chargeW > 0.01){
-        const energyIn = chargeW/1000/60;
-        b.runtime.socKWh = Math.min(cap, soc + energyIn*eff);
-        this.todayBatteryChargeKWh += energyIn;
-      }
-      pvLeft -= chargeW;
-      battTotal += chargeW;
-      b.runtime.powerW = chargeW;
-      b.runtime.state = chargeW>0.01 ? 'charging' : 'idle';
-      b.runtime.socPct = ((b.runtime.socKWh != null ? b.runtime.socKWh : soc) / cap) * 100;
+      if (!b.connected || (b.runtime && b.runtime.faulted)){ b.runtime.powerW = 0; b.runtime.state = b.connected ? 'fault' : 'off'; continue; }
+      const c = b.def.capacityKWh;
+      infos.push({ b, cap:c, eff:b.def.efficiency || 0.92,
+        soc:(b.runtime.socKWh != null) ? b.runtime.socKWh : c*0.5,
+        maxC:b.def.maxChargeW, maxD:b.def.maxDischargeW, chargeW:0, dischargeW:0 });
     }
-    return battTotal;
-  }
 
-  /** Distributes `netBeforeBattery` (>0 deficit, <0 surplus, in W) across connected batteries in
-   *  sequence. Returns total battery power (+charging / -discharging). Mutates each battery's
-   *  state-of-charge (kWh) when accumulate=true - this is genuinely stateful across ticks, unlike
-   *  the schedule-driven devices, which is why it can't be folded into the static weekly projection. */
-  _resolveBatteries(netBeforeBattery, accumulate){
-    let remaining = netBeforeBattery;
-    let battTotal = 0;
-    for (const b of this.getBatteryInstances()){
-      if (!b.connected){ b.runtime.powerW = 0; b.runtime.state = 'off'; continue; }
-      const cap = b.def.capacityKWh;
-      const eff = b.def.efficiency || 0.92;
-      const soc = (b.runtime.socKWh != null) ? b.runtime.socKWh : cap*0.5;
-      let chargeW = 0, dischargeW = 0;
-      if (remaining < -0.5){ // surplus available -> charge
-        const headroomKWh = Math.max(0, cap - soc);
-        const maxByHeadroom = headroomKWh * 1000 * 60 / eff; // W - rate that would exactly fill headroom in 1 minute
-        chargeW = Math.min(-remaining, b.def.maxChargeW, maxByHeadroom);
-        if (accumulate && chargeW > 0.01){
-          const energyIn = chargeW/1000/60;
-          b.runtime.socKWh = Math.min(cap, soc + energyIn*eff);
-          this.todayBatteryChargeKWh += energyIn;
+    let pvLeft = Math.max(0, pvW), homeNeed = Math.max(0, loadW);
+    let pvHome = 0, pvBatt = 0, pvGrid = 0;
+    for (const slot of order){
+      if (slot === 'home'){
+        const x = Math.min(pvLeft, homeNeed); pvHome += x; pvLeft -= x; homeNeed -= x;
+      } else if (slot === 'battery'){
+        for (const bi of infos){
+          if (pvLeft <= 0.5) break;
+          const maxByHeadroom = Math.max(0, bi.cap - bi.soc) * 1000 * 60 / bi.eff; // W that would exactly fill the headroom in 1 min
+          const c = Math.min(pvLeft, bi.maxC, maxByHeadroom);
+          if (c > 0){ bi.chargeW = c; pvLeft -= c; pvBatt += c; }
         }
-      } else if (remaining > 0.5){ // deficit -> discharge
-        const maxByAvailable = soc * 1000 * 60 * eff; // W - rate that would exactly empty soc in 1 minute
-        dischargeW = Math.min(remaining, b.def.maxDischargeW, maxByAvailable);
-        if (accumulate && dischargeW > 0.01){
-          const energyOut = dischargeW/1000/60;
-          b.runtime.socKWh = Math.max(0, soc - energyOut/eff);
+      } else { // grid
+        const x = Math.min(pvLeft, exportCap); pvGrid += x; pvLeft -= x;
+      }
+    }
+    const curtailedW = pvLeft > 0.5 ? pvLeft : 0;
+
+    let deficit = homeNeed, battToHome = 0;
+    if (pvBatt <= 0.01 && deficit > 0.5){ // a battery cannot charge and discharge in the same minute
+      for (const bi of infos){
+        if (deficit <= 0.5) break;
+        const maxByAvailable = Math.max(0, bi.soc - reserve*bi.cap) * 1000 * 60 * bi.eff; // W that would exactly reach the reserve in 1 min
+        const d = Math.min(deficit, bi.maxD, maxByAvailable);
+        if (d > 0){ bi.dischargeW = d; deficit -= d; battToHome += d; }
+      }
+    }
+    const gridToHome = Math.min(deficit, importCap);
+    const unservedW = Math.max(0, deficit - gridToHome);
+
+    let battNet = 0;
+    for (const bi of infos){
+      const net = bi.chargeW - bi.dischargeW;
+      if (accumulate){
+        if (bi.chargeW > 0.01){
+          const energyIn = bi.chargeW/1000/60;
+          bi.b.runtime.socKWh = Math.min(bi.cap, bi.soc + energyIn*bi.eff);
+          this.todayBatteryChargeKWh += energyIn;
+        } else if (bi.dischargeW > 0.01){
+          const energyOut = bi.dischargeW/1000/60;
+          bi.b.runtime.socKWh = Math.max(0, bi.soc - energyOut/bi.eff);
           this.todayBatteryDischargeKWh += energyOut;
         }
       }
-      const netAction = chargeW - dischargeW;
-      battTotal += netAction;
-      remaining += netAction;
-      b.runtime.powerW = netAction;
-      b.runtime.state = chargeW>0.01 ? 'charging' : (dischargeW>0.01 ? 'discharging' : 'idle');
-      b.runtime.socPct = ((b.runtime.socKWh != null ? b.runtime.socKWh : soc) / cap) * 100;
+      const socNow = (bi.b.runtime.socKWh != null) ? bi.b.runtime.socKWh : bi.soc;
+      bi.b.runtime.powerW = net;
+      bi.b.runtime.state = bi.chargeW > 0.01 ? 'charging' : (bi.dischargeW > 0.01 ? 'discharging' : 'idle');
+      bi.b.runtime.socPct = (socNow / bi.cap) * 100;
+      battNet += net;
     }
-    return battTotal;
+    return { batteryNetW: battNet, curtailedW, unservedW,
+      flows: { pvToHome:pvHome, pvToBattery:pvBatt, pvToGrid:pvGrid, batteryToHome:battToHome, gridToHome, curtailed:curtailedW, unserved:unservedW } };
   }
 
   // ---------------- persistence (session progress, not just the house layout) ----------------
@@ -424,7 +505,7 @@ class SimulationEngine {
     this.history = []; this.lastCompletedDay = null; this.powerHistory = []; this._lastSampleMin = -999;
     this.todayKWh = 0; this.todaySolarKWh = 0; this.todayImportKWh = 0; this.todayExportKWh = 0;
     this.todayCost = 0; this.todayKWhByDevice = {}; this.todayKWhByCategory = {}; this.todayKWhByRoom = {};
-    this.todayBatteryChargeKWh = 0; this.todayBatteryDischargeKWh = 0; this.todayMorningKWh = 0;
+    this.todayBatteryChargeKWh = 0; this.todayBatteryDischargeKWh = 0; this.todayMorningKWh = 0; this.todayCurtailedKWh = 0; this.todayLossKWh = 0;
     this.hourlyKWh.fill(0); this.hourlyGenKWh.fill(0);
   }
 }

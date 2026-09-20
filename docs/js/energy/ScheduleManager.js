@@ -29,9 +29,11 @@ const ScheduleManager = {
 
   // ---------------- time helpers ----------------
   /** "HH:MM" -> minutes since midnight */
+  _tmCache: new Map(),
   toMinutes(hhmm){
-    const [h,m] = hhmm.split(':').map(Number);
-    return h*60+m;
+    let v = this._tmCache.get(hhmm);
+    if (v === undefined){ const [h,m] = hhmm.split(':').map(Number); v = h*60+m; if (this._tmCache.size < 2000) this._tmCache.set(hhmm, v); }
+    return v;
   },
   fromMinutes(min){
     min = ((min%1440)+1440)%1440;
@@ -49,6 +51,19 @@ const ScheduleManager = {
    * null/undefined (falls back to `fallbackDef.defaultSchedule` if given,
    * else an "always on, every day" schedule).
    */
+  /** HOT-PATH variant for the simulation loop (called once per device per simulated minute): the normalised schedule is
+   *  cached per source object and MUST be treated as read-only. Schedules are only ever replaced (setSchedule ->
+   *  validateSchedule builds a new object), never edited in place, so identity is a safe cache key. Editors keep using
+   *  normalize(), which always returns a fresh private copy. */
+  _normCache: new WeakMap(),
+  normalizeShared(schedule, fallbackDef){
+    const src = schedule || (fallbackDef && fallbackDef.defaultSchedule);
+    if (!src || typeof src !== 'object') return this.normalize(schedule, fallbackDef);
+    let n = this._normCache.get(src);
+    if (!n){ n = this.normalize(schedule, fallbackDef); this._normCache.set(src, n); }
+    return n;
+  },
+
   normalize(schedule, fallbackDef){
     const src = schedule || (fallbackDef && fallbackDef.defaultSchedule) || { start:'00:00', end:'23:59', days:[0,1,2,3,4,5,6] };
     const out = { enabled: src.enabled !== false, days: {}, cycles: {} };
@@ -174,7 +189,7 @@ const ScheduleManager = {
   resolve(inst, absMin){
     const def = inst.def;
     if (!inst.connected) return { state:'off', powerW:0 };
-    const schedule = this.normalize(inst.schedule, def);
+    const schedule = this.normalizeShared(inst.schedule, def);
 
     if (def.profileType === 'always'){
       return { state:'on', powerW: def.states.on };

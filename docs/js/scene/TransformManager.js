@@ -56,6 +56,9 @@ class TransformManager {
     this.raycaster.setFromCamera(this.mouse, this.sm.camera);
     const hits = this.raycaster.intersectObjects(this.om.root.children, true);
     for (const h of hits){
+      // raycasting ignores `visible`: skip anything on a hidden storey / hidden room group
+      let vis = true; for (let p = h.object; p; p = p.parent) if (p.visible === false){ vis = false; break; }
+      if (!vis) continue;
       let o = h.object;
       while (o && !o.userData.instId) o = o.parent;
       if (o) return o.userData.instId;
@@ -83,6 +86,7 @@ class TransformManager {
     if (inst){
       this.gizmo.attach(inst.group);
       this.gizmo.setSpace(inst.kind==='solar' ? 'local' : 'world'); // panels live on a tilted roof group
+      this._applySnap();
       this.highlight.visible = true;
       this.highlight.setFromObject(inst.group);
     } else {
@@ -95,17 +99,31 @@ class TransformManager {
 
   setMode(mode){ this.gizmo.setMode(mode); } // 'translate' | 'rotate' | 'scale'
   setSnap(enabled){ this.snapEnabled = enabled; this._applySnap(); }
-  setGridSnap(m){ this.gridSnap = m; this._applySnap(); }
+  setGridSnap(m){
+    this.gridSnap = m; this._applySnap();
+    if (this.sm.roomBuilder) this.sm.roomBuilder.setGridStep(m); // the visible floor grid always shows the active snap step
+  }
   setRotSnap(deg){ this.rotSnapDeg = deg; this._applySnap(); }
+  /** Floor objects snap in ROOM-LOCAL coordinates (their parent is the room group), i.e. exactly to the grid lines
+   *  RoomBuilder draws from the room's corner - see _snapToRoomGrid(). The gizmo's own world-space translation snap
+   *  is only kept for roof panels (which live in the tilted roof's local space). */
   _applySnap(){
-    this.gizmo.setTranslationSnap(this.snapEnabled ? this.gridSnap : null);
+    const sel = this.selectedId ? this.om.find(this.selectedId) : null;
+    this.gizmo.setTranslationSnap(this.snapEnabled && sel && sel.kind==='solar' ? this.gridSnap : null);
     this.gizmo.setRotationSnap(this.snapEnabled ? THREE.MathUtils.degToRad(this.rotSnapDeg) : null);
     this.gizmo.setScaleSnap(this.snapEnabled ? 0.05 : null);
+  }
+
+  _snapToRoomGrid(inst){
+    if (!this.snapEnabled || inst.kind==='solar' || this.gizmo.mode!=='translate') return;
+    const st = this.gridSnap, g = inst.group.position;
+    g.x = Math.round(g.x/st)*st; g.z = Math.round(g.z/st)*st; // y untouched: stacked/wall-mounted items keep their height
   }
 
   _onGizmoChange(){
     const inst = this.om.find(this.selectedId);
     if (!inst) return;
+    this._snapToRoomGrid(inst);
     inst.position = { x:inst.group.position.x, y:inst.group.position.y, z:inst.group.position.z };
     inst.rotation = { x:inst.group.rotation.x, y:inst.group.rotation.y, z:inst.group.rotation.z };
     inst.scale = { x:inst.group.scale.x, y:inst.group.scale.y, z:inst.group.scale.z };

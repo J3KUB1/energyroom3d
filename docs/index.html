@@ -100,49 +100,59 @@
 <body>
 
 <div class="page">
-  <div class="brand"><span class="brand-mark">⚡</span><span>EnergyRoom<span class="brand-3d">3D</span></span></div>
+  <div class="brand"><span class="brand-mark">⚡</span><span>EnergyRoom<span class="brand-3d">3D</span></span>
+    <span class="lang-switch" style="margin-left:auto;display:inline-flex;gap:6px">
+      <button type="button" data-lang="pl" style="cursor:pointer;background:transparent;color:inherit;border:1px solid currentColor;border-radius:6px;padding:2px 8px">PL</button>
+      <button type="button" data-lang="en" style="cursor:pointer;background:transparent;color:inherit;border:1px solid currentColor;border-radius:6px;padding:2px 8px">EN</button>
+    </span></div>
 
   <div class="hero">
-    <h1>Rozstaw meble. Podłącz urządzenia. Zobacz rachunek.</h1>
-    <p class="lede">EnergyRoom 3D to interaktywny model domu w przeglądarce. Meblujesz pokoje, podłączasz sprzęt AGD i RTV, montujesz panele fotowoltaiczne — a symulacja liczy, ile to naprawdę kosztuje w ciągu dnia, tygodnia czy roku.</p>
-    <a class="cta" href="app.html">Wejdź do symulatora</a>
+    <h1 data-i18n="landing.h1">Rozstaw meble. Podłącz urządzenia. Zobacz rachunek.</h1>
+    <p class="lede" data-i18n="landing.lede">EnergyRoom 3D to interaktywny model domu w przeglądarce. Meblujesz pokoje, podłączasz sprzęt AGD i RTV, montujesz panele fotowoltaiczne — a symulacja liczy, ile to naprawdę kosztuje w ciągu dnia, tygodnia czy roku.</p>
+    <a class="cta" href="app.html" data-i18n="landing.cta">Wejdź do symulatora</a>
 
     <div class="readout">
-      <div class="stat"><span class="num" data-to="73">0</span><span class="label">urządzeń</span></div>
-      <div class="stat"><span class="num" data-to="52">0</span><span class="label">mebli</span></div>
-      <div class="stat"><span class="num" data-to="6">0</span><span class="label">typów pokoi</span></div>
-      <div class="stat"><span class="num" data-to="3">0</span><span class="label">panele PV</span></div>
-      <div class="stat"><span class="num" data-to="3">0</span><span class="label">magazyny energii</span></div>
+      <div class="stat"><span class="num" data-to="73">0</span><span class="label" data-i18n="landing.stat.devices">urządzeń</span></div>
+      <div class="stat"><span class="num" data-to="52">0</span><span class="label" data-i18n="landing.stat.furniture">mebli</span></div>
+      <div class="stat"><span class="num" data-to="6">0</span><span class="label" data-i18n="landing.stat.rooms">typów pokoi</span></div>
+      <div class="stat"><span class="num" data-to="3">0</span><span class="label" data-i18n="landing.stat.pv">panele PV</span></div>
+      <div class="stat"><span class="num" data-to="3">0</span><span class="label" data-i18n="landing.stat.battery">magazyny energii</span></div>
     </div>
   </div>
 
   <div class="features">
     <div class="row">
       <div class="glyph">🏠</div>
-      <div><h3>Dom, jaki potrzebujesz</h3><p>Sypialnia, kuchnia, łazienka, salon, biuro czy garaż — dodajesz i usuwasz pokoje, a każdy ma własne wymiary, podłogę i ściany.</p></div>
+      <div><h3 data-i18n="landing.f1.h">Dom, jaki potrzebujesz</h3><p data-i18n="landing.f1.p">Sypialnia, kuchnia, łazienka, salon, biuro czy garaż — dodajesz i usuwasz pokoje, a każdy ma własne wymiary, podłogę i ściany.</p></div>
     </div>
     <div class="row">
       <div class="glyph">🔌</div>
-      <div><h3>Realne zużycie, nie zgadywanie</h3><p>Każde urządzenie ma prawdziwy profil pracy — lodówka cyklicznie załącza sprężarkę, bojler grzeje i podtrzymuje, czajnik pracuje krótko, ale mocno.</p></div>
+      <div><h3 data-i18n="landing.f2.h">Realne zużycie, nie zgadywanie</h3><p data-i18n="landing.f2.p">Każde urządzenie ma prawdziwy profil pracy — lodówka cyklicznie załącza sprężarkę, bojler grzeje i podtrzymuje, czajnik pracuje krótko, ale mocno.</p></div>
     </div>
     <div class="row">
       <div class="glyph">☀</div>
-      <div><h3>Słońce i magazyny energii</h3><p>Panele PV na dachu garażu produkują prąd zależnie od pory dnia i pogody, a bateria domowa pokrywa nim wieczorne szczyty zużycia.</p></div>
+      <div><h3 data-i18n="landing.f3.h">Słońce i magazyny energii</h3><p data-i18n="landing.f3.p">Panele PV na dachu garażu produkują prąd zależnie od pory dnia, daty, pogody i cienia — a bateria domowa pokrywa nim wieczorne szczyty zużycia.</p></div>
     </div>
     <div class="row">
       <div class="glyph">📊</div>
-      <div><h3>Dashboard, który tłumaczy koszty</h3><p>Ranking najbardziej prądożernych urządzeń, scenariusze „co jeśli", porównania i pełny rozkład rachunku — nie tylko jedna liczba na końcu.</p></div>
+      <div><h3 data-i18n="landing.f4.h">Dashboard, który tłumaczy koszty</h3><p data-i18n="landing.f4.p">Ranking najbardziej prądożernych urządzeń, scenariusze „co jeśli”, porównania i pełny rozkład rachunku — nie tylko jedna liczba na końcu.</p></div>
     </div>
     <div class="row">
       <div class="glyph">🐾</div>
-      <div><h3>Zwierzak sieciowy</h3><p>Żyje z ruchu danych Twoich urządzeń — czysta zabawa, zero wpływu na energię czy koszty.</p></div>
+      <div><h3 data-i18n="landing.f5.h">Zwierzak sieciowy</h3><p data-i18n="landing.f5.p">Żyje z ruchu danych Twoich urządzeń i podpowiada, jak zarządzać energią w domu.</p></div>
     </div>
   </div>
 
-  <footer>Działa w całości lokalnie w przeglądarce — projekt zapisuje się na tym urządzeniu, bez konta i bez serwera.</footer>
+  <footer data-i18n="landing.footer">Działa w całości lokalnie w przeglądarce — projekt zapisuje się na tym urządzeniu, bez konta i bez serwera.</footer>
 </div>
 
+<script src="js/i18n/dictionary.js"></script>
+<script src="js/i18n/catalog_en.js"></script>
+<script src="js/i18n/I18n.js"></script>
 <script>
+  I18n.init();
+  document.title = I18n.t('landing.title');
+  document.querySelectorAll('.lang-switch button').forEach(b=>b.addEventListener('click',()=>{ I18n.setLang(b.dataset.lang); document.title = I18n.t('landing.title'); }));
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   document.querySelectorAll('.num').forEach(el=>{
     const to = Number(el.dataset.to);

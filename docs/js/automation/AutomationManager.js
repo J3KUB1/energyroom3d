@@ -68,7 +68,7 @@ class AutomationManager {
     const wasOverride = inst.runtime.automationOverride;
     if (wasOverride && wasOverride.state===state) return;
     inst.runtime.automationOverride = { state, since: absMin };
-    this.onLog(`[Automatyzacja] ${rule.name}: ${inst.customName||inst.def.name} → ${state}`);
+    this.onLog(I18n.t('log.automationFired', { rule: rule.name, name: inst.customName||I18n.deviceName(inst.def), state: I18n.deviceState(state) }));
   }
 
   clearOverride(instId){

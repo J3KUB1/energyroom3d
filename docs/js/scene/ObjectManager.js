@@ -29,8 +29,11 @@ class ObjectManager {
     this._nextId = 1;
     this.onChange = ()=>{}; // hook for UI refresh
     this.getRoomHeight = (opts && opts.getRoomHeight) || (()=>2.8);
-    this.getRoofGroup = (opts && opts.getRoofGroup) || (()=>null);
+    this.getRoofGroup = (opts && opts.getRoofGroup) || (()=>null);   // (roomId, slopeKey) -> THREE.Group | null
     this.roomGroups = new Map();
+    this.onPVGeometry = (inst)=>{};   // hook: panel world geometry (for ShadeModel) changed
+    this.onPVRemoved = (id)=>{};
+    this.onDeviceAdded = (inst)=>{};  // hook: a device was created (main.js plugs it into the nearest free socket)
   }
 
   getRoomGroup(roomId){
@@ -38,9 +41,10 @@ class ObjectManager {
     if (!g){ g = new THREE.Group(); g.name='Room:'+roomId; this.root.add(g); this.roomGroups.set(roomId, g); }
     return g;
   }
-  setRoomOffset(roomId, x, z){
+  /** Places a room's group in the world: x/z = its NW corner, y = its floor elevation (storey / basement). */
+  setRoomOffset(roomId, x, z, y){
     const g = this.getRoomGroup(roomId);
-    g.position.set(x, 0, z||0);
+    g.position.set(x, y||0, z||0);
   }
   removeRoomGroup(roomId){
     const g = this.roomGroups.get(roomId);
@@ -53,6 +57,8 @@ class ObjectManager {
   getFurniture(roomId){ return this.getAll(roomId).filter(i=>i.kind==='furniture'); }
   getSolar(roomId){ return this.getAll(roomId).filter(i=>i.kind==='solar'); }
   getBattery(roomId){ return this.getAll(roomId).filter(i=>i.kind==='battery'); }
+  /** Installation elements: sockets, power strips, switchboard, meter (see energy/ElectricalSystem.js). */
+  getElectrical(roomId){ return this.getAll(roomId).filter(i=>i.kind==='electrical'); }
   find(id){ return this.instances.find(i=>i.id===id); }
 
   addDevice(defId, pos, roomId){
@@ -65,10 +71,11 @@ class ObjectManager {
     if (!def) return null;
     return this._add('furniture', def, pos, roomId);
   }
-  addSolar(defId, pos, roomId){
+  /** slope: 'a' (main / south-facing slope) or 'b' (the opposite slope of a gable roof). */
+  addSolar(defId, pos, roomId, slope){
     const def = getSolarDefinition(defId);
     if (!def) return null;
-    return this._add('solar', def, pos, roomId);
+    return this._add('solar', def, pos, roomId, { slope: slope === 'b' ? 'b' : 'a' });
   }
   addBattery(defId, pos, roomId){
     const def = getBatteryDefinition(defId);
@@ -78,15 +85,27 @@ class ObjectManager {
     return inst;
   }
 
-  _add(kind, def, pos, roomId){
+  /** Sockets / strips / switchboard / meter. Wall elements sit at def.defaultY unless a y is given. */
+  addElectrical(defId, pos, roomId, rotY){
+    const def = getElectricalDefinition(defId);
+    if (!def) return null;
+    const p = { x: pos?.x ?? 1, y: (pos?.y != null && pos.y !== 0) ? pos.y : def.defaultY, z: pos?.z ?? 1 };
+    const inst = this._add('electrical', def, p, roomId);
+    if (inst && rotY){ this.applyTransform(inst.id, inst.position, { x:0, y:rotY, z:0 }, inst.scale); }
+    return inst;
+  }
+
+  _add(kind, def, pos, roomId, extra){
     roomId = roomId || 'main';
-    const group = ModelFactory.build(def.modelType, kind!=='furniture');
+    const group = ModelFactory.build(def.modelType, kind==='device' || kind==='solar' || kind==='battery');
     const id = 'obj_' + (this._nextId++);
-    const roof = (kind==='solar') ? this.getRoofGroup(roomId) : null;
+    const roof = (kind==='solar') ? this.getRoofGroup(roomId, extra && extra.slope) : null;
     const parent = roof || this.getRoomGroup(roomId);
     let y = pos?.y;
+    if (kind==='electrical' && y == null) y = def.defaultY || 0;
     if (y == null || y === 0){
-      if (roof) y = roof.userData.surfaceY || 0;
+      if (kind==='electrical') y = def.defaultY || 0;
+      else if (roof) y = roof.userData.surfaceY || 0;
       else if (group.userData.ceiling) y = this.getRoomHeight(roomId) - 0.05;
       else if (group.userData.wallMount) y = 1.3;
       else y = 0;
@@ -106,10 +125,13 @@ class ObjectManager {
       manualOverride: null, // null='Auto' (follow schedule) | 'on' | 'off' - user's direct power switch, wins over automation & schedule
       schedule: kind==='device' ? { ...ScheduleManager.validateSchedule(def.defaultSchedule) } : null,
       stats: { energyYearKWh: 0 },
-      runtime: { state: kind==='device' ? (def.idleState||'off') : (kind==='solar' ? 'generating' : (kind==='battery' ? 'idle' : null)), powerW: 0, continuousOnMinutes:0, standbyMinutes:0, automationOverride:null, pendingAutomation:null },
+      runtime: { state: kind==='device' ? (def.idleState||'off') : (kind==='solar' ? 'generating' : (kind==='battery' ? 'idle' : (kind==='electrical' ? 'off' : null))), powerW: 0, continuousOnMinutes:0, standbyMinutes:0, automationOverride:null, pendingAutomation:null },
     };
-    if (kind==='solar'){ inst.installedAtAbsMin = null; this.computePVOrientation(inst); }
+    if (kind==='device') inst.plugTo = null;                       // id of the socket / power strip it is plugged into
+    if (kind==='electrical'){ inst.circuitId = null; inst.plugTo = null; inst.enabled = true; } // socket: circuit; strip: socket + on/off switch
+    if (kind==='solar'){ inst.installedAtAbsMin = null; inst.slope = (extra && extra.slope) || 'a'; this.computePVOrientation(inst); }
     this.instances.push(inst);
+    if (kind==='device') this.onDeviceAdded(inst);
     this.onChange();
     return inst;
   }
@@ -119,6 +141,7 @@ class ObjectManager {
     if (!inst) return;
     inst.group.parent && inst.group.parent.remove(inst.group);
     this.instances = this.instances.filter(i=>i.id!==id);
+    if (inst.kind==='solar') this.onPVRemoved(id);
     this.onChange();
   }
 
@@ -127,14 +150,16 @@ class ObjectManager {
     if (!inst) return null;
     const newPos = { x: inst.position.x+0.3, y: inst.position.y, z: inst.position.z+0.3 };
     const copy = inst.kind==='device' ? this.addDevice(inst.defId, newPos, inst.roomId)
-               : inst.kind==='solar'  ? this.addSolar(inst.defId, newPos, inst.roomId)
+               : inst.kind==='solar'  ? this.addSolar(inst.defId, newPos, inst.roomId, inst.slope)
                : inst.kind==='battery'? this.addBattery(inst.defId, newPos, inst.roomId)
+               : inst.kind==='electrical' ? this.addElectrical(inst.defId, newPos, inst.roomId)
                                        : this.addFurniture(inst.defId, newPos, inst.roomId);
     if (!copy) return null;
     copy.rotation = { ...inst.rotation };
     copy.scale = { ...inst.scale };
     copy.customName = inst.customName;
     if (inst.kind==='device'){ copy.schedule = JSON.parse(JSON.stringify(inst.schedule)); copy.connected = inst.connected; copy.manualOverride = inst.manualOverride; }
+    if (inst.kind==='electrical' && inst.def.type==='socket') copy.circuitId = inst.circuitId;
     // note: solar panels auto-parent to the room's roof group inside addSolar (see getRoofGroup),
     // so the duplicate already lands on the correct roof without any extra reparenting here.
     this.applyTransform(copy.id, copy.position, copy.rotation, copy.scale);
@@ -178,6 +203,17 @@ class ObjectManager {
     let azimuthDeg = THREE.MathUtils.radToDeg(Math.atan2(normal.x, -normal.z));
     if (azimuthDeg < 0) azimuthDeg += 360;
     inst.pvOrientation = { tiltDeg, azimuthDeg };
+    // world-space box of the panel (for the shading model): recomputed only when the panel/roof moves
+    const sc = new THREE.Vector3(); inst.group.getWorldScale(sc);
+    const u = new THREE.Vector3(1,0,0).applyQuaternion(q).normalize();
+    const v = new THREE.Vector3(0,0,1).applyQuaternion(q).normalize();
+    const c = new THREE.Vector3(); inst.group.getWorldPosition(c);
+    c.addScaledVector(normal, 0.03);
+    inst.pvGeom = {
+      center:[c.x,c.y,c.z], u:[u.x,u.y,u.z], n:[normal.x,normal.y,normal.z], v:[v.x,v.y,v.z],
+      halfW: 0.5*Math.abs(sc.x), halfL: 0.825*Math.abs(sc.z), halfT: 0.03, roomId: inst.roomId,
+    };
+    this.onPVGeometry(inst);
   }
 
   setSchedule(id, schedule){

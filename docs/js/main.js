@@ -13,33 +13,49 @@
 (function(){
   I18n.init();
 
-  let houseState = defaultHouseState();
-  let energySettings = { ...DEFAULT_ENERGY_SETTINGS, tariffPrices: JSON.parse(JSON.stringify(DEFAULT_ENERGY_SETTINGS.tariffPrices)), tariffSchedules: JSON.parse(JSON.stringify(DEFAULT_ENERGY_SETTINGS.tariffSchedules)) };
+  let building = null;                   // BuildingModel.compile(houseState): rebuilt with the house
+  let houseState = freshHouseState();   // levels + per-room designs included (see BuildingModel)
+  let energySettings = { ...DEFAULT_ENERGY_SETTINGS, tariffPrices: JSON.parse(JSON.stringify(DEFAULT_ENERGY_SETTINGS.tariffPrices)), tariffSchedules: JSON.parse(JSON.stringify(DEFAULT_ENERGY_SETTINGS.tariffSchedules)), pvOrder: DEFAULT_ENERGY_SETTINGS.pvOrder.slice() };
 
   const container = document.getElementById('threeContainer');
   const sceneManager = new SceneManager(container);
   const roomBuilder = new RoomBuilder(sceneManager.scene);
   const environmentBuilder = new EnvironmentBuilder(sceneManager.scene);
+  sceneManager.roomBuilder = roomBuilder; // floor grid lives in RoomBuilder (per room, room-local coordinates)
+
+  // Geometric PV shading (buildings, roofs, trees, other panels). SolarCalculator consults it for EVERY
+  // caller - the live simulation and the analytics projections - so shade genuinely changes production.
+  const shadeModel = new ShadeModel();
+  SolarCalculator.shadeModel = shadeModel;
 
   function getRoom(id){ return houseState.rooms.find(r=>r.id===id); }
   function getActiveRoom(){ return getRoom(houseState.activeRoomId) || houseState.rooms[0]; }
 
   const objectManager = new ObjectManager(sceneManager.scene, {
     getRoomHeight: (roomId)=> (getRoom(roomId)||houseState.rooms[0]).settings.height,
-    getRoofGroup: (roomId)=> roomBuilder.roofGroups[roomId] || null,
+    getRoofGroup: (roomId, slope)=> roomBuilder.roofGroups[slope==='b' ? roomId+'#b' : roomId] || roomBuilder.roofGroups[roomId] || null,
   });
+  objectManager.onPVGeometry = (inst)=>{ if (inst.pvGeom) shadeModel.setPanel(inst.id, inst.pvGeom); };
+  objectManager.onPVRemoved = (id)=>{ shadeModel.removePanel(id); };
   const transformManager = new TransformManager(sceneManager, objectManager);
 
   function rebuildHouse(){
-    roomBuilder.build(houseState.rooms);
-    for (const r of houseState.rooms) objectManager.setRoomOffset(r.id, r.offsetX, 0);
+    roomBuilder.build(houseState);
+    for (const r of houseState.rooms){ const b = roomBuilder.bounds[r.id]; objectManager.setRoomOffset(r.id, b.offsetX, b.offsetZ, b.elevation); }
     roomBuilder.setWallVisibility(houseState.wallVisibility ?? 1);
     environmentBuilder.build(roomBuilder.bounds);
+    // static shading geometry = buildings + trees; then fit the sun's shadow frustum to the whole plot
+    shadeModel.setStaticOccluders(roomBuilder.occluders.concat(environmentBuilder.occluders));
+    {
+      let x1=Infinity, x2=-Infinity, z1=Infinity, z2=-Infinity;
+      for (const id in roomBuilder.bounds){ const b = roomBuilder.bounds[id]; x1=Math.min(x1,b.offsetX); x2=Math.max(x2,b.offsetX+b.width); z1=Math.min(z1,b.offsetZ); z2=Math.max(z2,b.offsetZ+b.length); }
+      if (isFinite(x1)) sceneManager.dayNight.setFocus((x1+x2)/2, (z1+z2)/2, Math.hypot(x2-x1, z2-z1)/2 + 6);
+    }
     // Solar panels live on the roof's own THREE.Group, which RoomBuilder recreates from scratch
     // on every rebuild (room resized, material changed, etc) - reattach them to the fresh roof
     // so they don't end up orphaned on a detached group that's no longer part of the scene.
     for (const p of objectManager.getSolar()){
-      const roof = roomBuilder.roofGroups[p.roomId];
+      const roof = roomBuilder.roofGroups[p.slope==='b' ? p.roomId+'#b' : p.roomId] || roomBuilder.roofGroups[p.roomId];
       if (roof && p.group.parent !== roof){
         roof.add(p.group);
         p.group.position.set(p.position.x, p.position.y, p.position.z);
@@ -47,10 +63,50 @@
       }
       objectManager.computePVOrientation(p); // roof pitch is part of the world transform - refresh after any reattach
     }
+    building = BuildingModel.compile(houseState);   // envelopes (UA, thermal mass, windows...), shading geometry, design issues
+    applyLevelView();
+  }
+
+  /** Which storeys are drawn: the active level and everything below it ("cutaway"), or the whole house. */
+  function applyLevelView(){
+    const act = BuildingModel.level(houseState, houseState.activeLevelId);
+    const all = houseState.levelView === 'all' || houseState.activeRoomId === '__all__';
+    for (const r of houseState.rooms){
+      const vis = all || BuildingModel.elevation(houseState, r) <= act.elevation + 0.01;
+      const rg = roomBuilder.roomGroups[r.id]; if (rg) rg.visible = vis;
+      objectManager.getRoomGroup(r.id).visible = vis;
+    }
+    environmentBuilder.group.visible = all || act.elevation >= -0.01;   // the lawn hides a basement, so drop it when you look at one
   }
   rebuildHouse();
 
+  // ---- Electrical installation (Stage 2): sockets/strips/board/meter are objects; circuits, breakers and wires live in ElectricalSystem ----
+  const electrical = new ElectricalSystem({
+    getElements: ()=>objectManager.getElectrical(),
+    getDevices: ()=>objectManager.getDevices(),
+    getRooms: ()=>houseState.rooms.map(r=>({ id:r.id, name:r.name, type:r.type, offsetX:r.offsetX||0, offsetZ:r.offsetZ||0, elevation:BuildingModel.elevation(houseState, r), width:r.settings.width, length:r.settings.length, height:r.settings.height })),
+    createElement: (defId, roomId, pos, rotY)=>objectManager.addElectrical(defId, pos, roomId, rotY),
+    removeElement: (id)=>objectManager.remove(id),
+    onEvent: (ev)=>handleElectricalEvent(ev),
+  });
+  const wireRenderer = new WireRenderer(sceneManager.scene, electrical);
+  objectManager.onDeviceAdded = (inst)=>{ if (!electrical.suspendAutoPlug) electrical.autoPlug(inst); };
+  function handleElectricalEvent(ev){
+    const ui = window.EnergyRoom3D && window.EnergyRoom3D.ui; if (!ui) return;
+    const b = ev.breakerId ? electrical.breaker(ev.breakerId) : null;
+    const circ = ev.circuitIds && ev.circuitIds.length ? electrical.circuit(ev.circuitIds[0]) : (ev.circuitId ? electrical.circuit(ev.circuitId) : null);
+    const name = (circ && circ.name) || (b && b.name) || '';
+    const amps = ev.currentA != null ? ev.currentA.toFixed(1) : '';
+    let msg = null;
+    if (ev.type === 'breakerTrip') msg = I18n.t(ev.reason === 'shortCircuit' ? 'elec.event.breakerShort' : 'elec.event.breakerOverload', { name, amps, rating: b ? b.ratingA : '' });
+    else if (ev.type === 'mainTrip') msg = I18n.t('elec.event.mainTrip', { amps });
+    else if (ev.type === 'stripTrip') msg = I18n.t('elec.event.stripTrip', { amps });
+    else if (ev.type === 'cableOverheat') msg = I18n.t('elec.event.cableOverheat', { name, amps });
+    if (msg){ ui.log(msg); ui.toast('⚡ ' + msg); ui.onElectricalEvent && ui.onElectricalEvent(ev); }
+  }
+
   const automationManager = new AutomationManager({ getInstances: ()=>objectManager.getDevices() });
+  let pendingHour = null;
   let simulationEngine; // forward-declared so WeatherSystem's getSimDate closure can reference it once assigned below
   const weatherManager = new WeatherSystem({ getSimDate: ()=> simulationEngine ? simulationEngine.simDate : new Date() });
   const petManager = new PetManager({});
@@ -65,12 +121,12 @@
     getStartDate: ()=> new Date(energySettings.startDateISO || Date.now()),
     automationManager,
     weatherManager,
+    electrical,
     onMinuteTick: (sim)=>{
       if (sim.playing){
-        const hour = sim.minuteOfDay/60;
-        sceneManager.setDayNight(hour);
-        const range = document.getElementById('dayNightRange');
-        if (range){ range.value = hour.toFixed(1); document.getElementById('dayNightLabel').textContent = sim.clockLabel; }
+        // NOT applied here: at high speed this fires thousands of times per frame. The render-loop hook below
+        // applies the latest hour once per frame (sky, sun, shadows, label).
+        pendingHour = sim.minuteOfDay/60;
         // the companion is "fed" by data-bit trickle from active network/computer devices
         const activeNet = objectManager.getDevices().filter(d =>
           (d.def.category==='smarthome' || d.def.category==='computers') &&
@@ -97,17 +153,53 @@
     automationManager,
     simulationEngine,
     rebuildHouse,
+    electrical,
+    onInstallationChanged: ()=>{ wireRenderer.markDirty(); },
   });
 
   const ui = new UIManager({
     sceneManager, roomBuilder, objectManager, transformManager, simulationEngine,
     analyticsManager, automationManager, projectManager, weatherManager, petManager,
-    questManager, advisorEngine,
+    questManager, advisorEngine, electrical, wireRenderer,
+    applyLevelView, getBuilding: ()=>building,
     getHouseState: ()=>houseState, setHouseState: (v)=>{ houseState=v; },
     getActiveRoom, getRoom,
     getEnergySettings: ()=>energySettings, setEnergySettings: (v)=>{ energySettings=v; },
     rebuildHouse,
   });
+
+  // ---- sky / season / label: once per frame at most, and only when something visible changed ----
+  sceneManager.getSkyContext = ()=>({
+    dayOfYear: simulationEngine.dayOfYear,
+    skyFactor: weatherManager.getMultipliers().skyFactor,
+  });
+  let lastSkyKey = '', lastAbsMin = -1;
+  sceneManager.onFrame(()=>{
+    let dirty = false;
+    // clock moved (playing, skipTo, project load...) -> follow it; a manual slider preview while paused is left alone
+    if (simulationEngine.absMin !== lastAbsMin){ lastAbsMin = simulationEngine.absMin; pendingHour = simulationEngine.minuteOfDay/60; }
+    if (pendingHour != null){ sceneManager._hour = pendingHour; pendingHour = null; dirty = true; }
+    const key = simulationEngine.dayOfYear + '|' + weatherManager.getMultipliers().skyFactor.toFixed(2);
+    if (key !== lastSkyKey){ lastSkyKey = key; dirty = true; environmentBuilder.setSeason(simulationEngine.season); }
+    if (dirty && sceneManager._hour != null){
+      sceneManager.setDayNight(sceneManager._hour);
+      if (window.EnergyRoom3D && window.EnergyRoom3D.ui) window.EnergyRoom3D.ui.updateDayNightLabel(true);
+    }
+  });
+  // installation wires: rebuilt only when an element/wire changed (cheap signature, checked ~5x per second)
+  let lastElecSig = '', lastElecCheck = 0;
+  sceneManager.onFrame(()=>{
+    const now = performance.now();
+    if (now - lastElecCheck > 200){
+      lastElecCheck = now;
+      const sig = objectManager.getElectrical().map(e=>e.id+':'+e.position.x.toFixed(2)+','+e.position.y.toFixed(2)+','+e.position.z.toFixed(2)).join('|') + '#' + electrical.data.wires.map(w=>w.id+w.route+(w.damaged?'x':'')).join(',');
+      if (sig !== lastElecSig){ lastElecSig = sig; wireRenderer.markDirty(); }
+    }
+    wireRenderer.update(now);
+  });
+  environmentBuilder.setSeason(simulationEngine.season);
+  sceneManager.setDayNight(simulationEngine.minuteOfDay/60);
+  ui.updateDayNightLabel(true);
 
   // instantaneous state resolution even while paused (so the footer/props aren't frozen at 0)
   simulationEngine._recomputeInstant(false);
@@ -185,10 +277,12 @@
     simulationEngine._syncCalendarEpoch(); // re-anchor now that the definitive start date is set (see section 3 day-of-week note in SimulationEngine)
     buildDemoMainRoom();
     buildDemoGarage();
+    electrical.load(null); electrical.autoInstall(); wireRenderer.markDirty();
   }
   projectManager.pushHistory();
+  simulationEngine._recomputeInstant(false);
 
   sceneManager.setView('home');
 
-  window.EnergyRoom3D = { sceneManager, roomBuilder, environmentBuilder, objectManager, transformManager, simulationEngine, analyticsManager, automationManager, projectManager, weatherManager, petManager, questManager, advisorEngine, ui, buildDemoMainRoom, buildDemoGarage };
+  window.EnergyRoom3D = { getBuilding: ()=>building, applyLevelView, electrical, wireRenderer, shadeModel, sceneManager, roomBuilder, environmentBuilder, objectManager, transformManager, simulationEngine, analyticsManager, automationManager, projectManager, weatherManager, petManager, questManager, advisorEngine, ui, buildDemoMainRoom, buildDemoGarage };
 })();

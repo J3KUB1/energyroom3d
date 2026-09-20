@@ -9,7 +9,7 @@ class SceneManager {
     this.container = container;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0b0f16);
-    this.scene.fog = new THREE.Fog(0x0b0f16, 18, 34);
+    this.scene.fog = new THREE.Fog(0x0b0f16, 22, 60);
 
     const aspect = container.clientWidth/container.clientHeight;
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.05, 100);
@@ -34,11 +34,12 @@ class SceneManager {
     this.controls.target.set(3.2, 0.9, 2.2);
     this.controls.update();
 
-    this._buildLights();
-    this._buildGrid();
-
     this.clock = new THREE.Clock();
     this._animateCallbacks = [];
+    this._buildLights();
+    // real day/night cycle (sun geometry from the simulated date, sky dome, stars, moon) - see DayNightCycle.js
+    this.getSkyContext = ()=>({ dayOfYear: 172, skyFactor: 1 }); // main.js replaces this with the live simulation date + weather
+    this.dayNight = new DayNightCycle(this);
     this._renderLoop = this._renderLoop.bind(this);
     requestAnimationFrame(this._renderLoop);
 
@@ -56,9 +57,9 @@ class SceneManager {
     this.sun.position.set(6, 9, 3);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.camera.left = -8; this.sun.shadow.camera.right = 8;
-    this.sun.shadow.camera.top = 8; this.sun.shadow.camera.bottom = -8;
-    this.sun.shadow.camera.near = 0.5; this.sun.shadow.camera.far = 30;
+    this.sun.shadow.camera.left = -12; this.sun.shadow.camera.right = 12;
+    this.sun.shadow.camera.top = 12; this.sun.shadow.camera.bottom = -12;
+    this.sun.shadow.camera.near = 1; this.sun.shadow.camera.far = 130; // DayNightCycle.setFocus() refits this to the house
     this.sun.shadow.bias = -0.0015;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
@@ -70,39 +71,20 @@ class SceneManager {
     this.scene.add(this.roomLight);
   }
 
-  _buildGrid(){
-    this.grid = new THREE.GridHelper(20, 80, 0x2a3a52, 0x18202e);
-    this.grid.position.y = 0.001;
-    this.scene.add(this.grid);
-  }
-  setGridVisible(v){ this.grid.visible = v; }
+  /** The floor grid now lives in RoomBuilder (one grid per room, in room-local coordinates, so it matches walls
+   *  and snapping exactly). These thin wrappers keep the old SceneManager API working for existing callers. */
+  setGridVisible(v){ if (this.roomBuilder) this.roomBuilder.setGridVisible(v); }
 
-  /** hour: 0-24 float. Drives sun angle, color temperature, sky, room fill */
+  /** hour: 0-24 float. Drives sun angle/colour, sky, stars, shadows and room fill from the simulated date.
+   *  Returns the sun state {elevationDeg, azimuthDeg, phase, daylight, sunriseHour, sunsetHour,...}. */
   setDayNight(hour){
-    const t = hour/24;
-    const angle = t*Math.PI*2 - Math.PI/2;
-    const r = 10;
-    this.sun.position.set(Math.cos(angle)*r, Math.max(Math.sin(angle)*r, 1.2), 3);
-    this.sun.target.position.set(0,0,0);
-
-    let skyTop, sunIntensity, ambientI, hemiI, fogColor;
-    if (hour>=6 && hour<9){ // sunrise
-      const k=(hour-6)/3; skyTop=lerpColor(0x1c2333,0x9fc4ff,k); sunIntensity=0.5+0.6*k; ambientI=0.12+0.1*k; hemiI=0.3+0.3*k;
-    } else if (hour>=9 && hour<17){ // day
-      skyTop=0xaed4ff; sunIntensity=1.15; ambientI=0.22; hemiI=0.6;
-    } else if (hour>=17 && hour<20){ // sunset
-      const k=(hour-17)/3; skyTop=lerpColor(0xaed4ff,0x2a2136,k); sunIntensity=1.15-0.9*k; ambientI=0.22-0.1*k; hemiI=0.6-0.35*k;
-    } else { // night
-      skyTop=0x0b0f16; sunIntensity=0.05; ambientI=0.08; hemiI=0.18;
-    }
-    this.scene.background = new THREE.Color(skyTop);
-    this.scene.fog.color = new THREE.Color(skyTop);
-    this.sun.intensity = sunIntensity;
-    this.ambient.intensity = ambientI;
-    this.hemi.intensity = hemiI;
-    const night = hour<6.5 || hour>19.5;
-    this.roomLight.intensity = night ? 0.55 : 0.0;
+    this._hour = hour;
+    const st = this.dayNight.apply(hour, this.getSkyContext());
+    this.currentPhase = st.phase; this.sunState = st;
+    return st;
   }
+  /** Re-apply the current hour (date or weather changed while the clock did not move). */
+  refreshSky(){ if (this._hour != null) return this.setDayNight(this._hour); }
 
   onResize(){
     const w = this.container.clientWidth, h = this.container.clientHeight;
@@ -140,12 +122,13 @@ class SceneManager {
   /** Frame a floor-plane rectangle (x1,z1)..(x2,z2), e.g. a room's footprint. Always uses a
    *  fixed, reliable 3/4 viewing angle rather than the previous camera direction, so switching
    *  between very differently-shaped rooms never produces a degenerate near-grazing view. */
-  frameArea(x1, z1, x2, z2, height){
+  /** elev = floor level of what is framed (upper storeys / basements). */
+  frameArea(x1, z1, x2, z2, height, elev){
     const cx = (x1+x2)/2, cz = (z1+z2)/2;
     const w = Math.abs(x2-x1), d = Math.abs(z2-z1);
     const diag = Math.hypot(w, d, (height||2.6));
     const dir = new THREE.Vector3(0.62, 0.52, 0.62).normalize();
-    this.controls.target.set(cx, (height||2.6)*0.32, cz);
+    this.controls.target.set(cx, (elev||0) + (height||2.6)*0.32, cz);
     this.camera.position.copy(this.controls.target).add(dir.multiplyScalar(Math.max(diag*0.82, 3.2)));
     this.controls.update();
   }

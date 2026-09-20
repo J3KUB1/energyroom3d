@@ -17,9 +17,18 @@
  *    the browser resumes the simulation's timeline instead of
  *    resetting the clock to 08:00 Day 0 every time.
  */
+/** Save-format version. 3 = tariffs + weather + PV priority (2 values). 4 = 3-slot PV order, export/import limits,
+ *  battery reserve. 5 = electrical installation (sockets/strips/board/meter objects, circuits, breakers, wires, plugs);
+ *  older files get a complete installation generated on load (ElectricalSystem.autoInstall).
+ *  6 = house designer: levels, per-room walls / openings / partitions / roof, stairs, room offsets in Z (pre-6 files get
+ *  the legacy design generated on load: same windows/doors/roof as before, one level). Older files load through migrateEnergySettings() (see below) with no data loss. */
+const PROJECT_VERSION = 6;
+
 class ProjectManager {
-  constructor({ objectManager, getHouseState, setHouseState, getEnergySettings, setEnergySettings, automationManager, simulationEngine, rebuildHouse, onLog }){
+  constructor({ objectManager, getHouseState, setHouseState, getEnergySettings, setEnergySettings, automationManager, simulationEngine, rebuildHouse, onLog, electrical, onInstallationChanged }){
     this.om = objectManager;
+    this.electrical = electrical || null;                 // ElectricalSystem
+    this.onInstallationChanged = onInstallationChanged || (()=>{});
     this.getHouseState = getHouseState;
     this.setHouseState = setHouseState;
     this.getEnergySettings = getEnergySettings;
@@ -35,16 +44,21 @@ class ProjectManager {
 
   serialize(){
     return {
-      version: 3,
+      version: PROJECT_VERSION,
       projectName: this.projectName,
       house: this.getHouseState(),
       energy: this.getEnergySettings(),
       automationRules: this.automation.rules,
+      installation: this.electrical ? this.electrical.serialize() : undefined,
       objects: this.om.getAll().map(i => ({
         id:i.id, kind:i.kind, defId:i.defId, roomId:i.roomId, customName:i.customName,
         position:i.position, rotation:i.rotation, scale:i.scale,
         connected:i.connected, schedule:i.schedule, manualOverride:i.manualOverride,
         socKWh: i.kind==='battery' ? i.runtime.socKWh : undefined,
+        slope: i.kind==='solar' ? (i.slope || 'a') : undefined,
+        plugTo: (i.kind==='device' || i.kind==='electrical') ? (i.plugTo || null) : undefined,
+        circuitId: i.kind==='electrical' ? (i.circuitId || null) : undefined,
+        enabled: i.kind==='electrical' ? i.enabled !== false : undefined,
       })),
     };
   }
@@ -56,23 +70,28 @@ class ProjectManager {
   }
 
   deserialize(json){
-    if (!json || typeof json !== 'object') throw new Error('Nieprawidłowy plik projektu');
+    if (!json || typeof json !== 'object') throw new Error(I18n.t('msg.invalidProjectFile'));
     this.projectName = json.projectName || 'Projekt';
-    const house = json.house && Array.isArray(json.house.rooms) ? json.house : defaultHouseState();
+    const house = BuildingModel.migrateHouse(json.house && Array.isArray(json.house.rooms) ? json.house : defaultHouseState());   // pre-designer projects get levels + a design per room
     this.setHouseState(house);
     this.rebuildHouse();
     this.setEnergySettings(migrateEnergySettings(json.energy));
     this.om.clear();
     this.automation.rules = Array.isArray(json.automationRules) ? json.automationRules : [];
+    const idMap = {};   // saved object id -> new object id (ObjectManager numbers objects afresh on every load)
     if (Array.isArray(json.objects)){
       for (const o of json.objects){
         try {
           const roomId = o.roomId || 'main';
           const inst = o.kind==='furniture' ? this.om.addFurniture(o.defId, o.position, roomId)
-                     : o.kind==='solar'      ? this.om.addSolar(o.defId, o.position, roomId)
+                     : o.kind==='solar'      ? this.om.addSolar(o.defId, o.position, roomId, o.slope)
                      : o.kind==='battery'     ? this.om.addBattery(o.defId, o.position, roomId)
+                     : o.kind==='electrical'  ? this.om.addElectrical(o.defId, o.position, roomId)
                                               : this.om.addDevice(o.defId, o.position, roomId);
           if (!inst) continue;
+          if (o.id) idMap[o.id] = inst.id;
+          if (o.kind==='electrical'){ inst.circuitId = o.circuitId || null; inst.enabled = o.enabled !== false; inst.plugTo = o.plugTo || null; }
+          else if (o.kind==='device') inst.plugTo = o.plugTo || null;
           this.om.applyTransform(inst.id, o.position||{x:0,y:0,z:0}, o.rotation||{x:0,y:0,z:0}, o.scale||{x:1,y:1,z:1});
           if (o.customName) this.om.rename(inst.id, o.customName);
           if (typeof o.connected === 'boolean') this.om.setConnected(inst.id, o.connected);
@@ -81,6 +100,20 @@ class ProjectManager {
           if (o.kind==='battery' && typeof o.socKWh === 'number') inst.runtime.socKWh = o.socKWh;
         } catch(e){ console.warn('Skipping corrupt object entry', e); }
       }
+    }
+    if (this.electrical){
+      // plug references point at OLD object ids - translate them, then load the installation itself
+      for (const inst of this.om.getAll()) if (inst.plugTo) inst.plugTo = idMap[inst.plugTo] || null;
+      if (json.installation){
+        this.electrical.load(json.installation);
+        ElectricalSystem.remapIds(this.electrical.data, idMap);
+        this.electrical.prune();
+      } else {
+        // version < 5 project: build a complete, sensible installation around what is already there
+        this.electrical.load(null);
+        this.electrical.autoInstall();
+      }
+      this.onInstallationChanged();
     }
     if (this.sim){
       if (json.simProgress) this.sim.deserializeProgress(json.simProgress);
@@ -128,10 +161,11 @@ class ProjectManager {
 
   newProject(){
     this.projectName = 'Nowy Dom';
-    this.setHouseState(defaultHouseState());
+    this.setHouseState(freshHouseState());
     this.rebuildHouse();
     this.setEnergySettings(freshEnergySettings());
     this.om.clear();
+    if (this.electrical){ this.electrical.load(null); this.electrical.autoInstall(); this.onInstallationChanged(); }
     this.automation.rules = [];
     this.history=[]; this.future=[];
     if (this.sim) this.sim.resetProgress();
@@ -208,6 +242,10 @@ const ROOM_TYPE_META = {
   living:   { icon:'🛋', label:'Salon',    defaults:{ width:6.5, length:5.5, height:2.8, floor:'Wood',     wall:'White',    ceiling:'White' } },
   office:   { icon:'🖥', label:'Biuro',    defaults:{ width:4.0, length:3.5, height:2.8, floor:'Carpet',   wall:'Gray',     ceiling:'White' } },
 };
+// room types introduced by the house designer (utility room, basement, balcony, terrace, garden - see data/building.js)
+for (const [t, m] of Object.entries(EXTRA_ROOM_TYPE_META)){
+  ROOM_TYPE_META[t] = Object.assign({ label:({ utility:'Pomieszczenie gospodarcze', basement:'Piwnica', balcony:'Balkon', terrace:'Taras', garden:'Ogród' })[t] }, m);
+}
 function getRoomTypeMeta(type){ return ROOM_TYPE_META[type] || ROOM_TYPE_META.room; }
 
 const DEFAULT_ROOM_SETTINGS = ROOM_TYPE_META.room.defaults;
@@ -215,13 +253,15 @@ const DEFAULT_GARAGE_SETTINGS = ROOM_TYPE_META.garage.defaults;
 function defaultHouseState(){
   return {
     rooms: [
-      { id:'main',   name:'Pokój',  type:'room',   settings:{...DEFAULT_ROOM_SETTINGS},   offsetX:0 },
-      { id:'garage', name:'Garaż',  type:'garage', settings:{...DEFAULT_GARAGE_SETTINGS}, offsetX: DEFAULT_ROOM_SETTINGS.width + 1.4 },
+      { id:'main',   name:I18n.roomType('room'),  type:'room',   settings:{...DEFAULT_ROOM_SETTINGS},   offsetX:0 },
+      { id:'garage', name:I18n.roomType('garage'),  type:'garage', settings:{...DEFAULT_GARAGE_SETTINGS}, offsetX: DEFAULT_ROOM_SETTINGS.width + 1.4 },
     ],
     activeRoomId: 'main',
     wallVisibility: 1,
   };
 }
+/** A ready-to-use house: same two rooms as before, now with levels / designs filled in. */
+function freshHouseState(){ return BuildingModel.migrateHouse(defaultHouseState()); }
 
 /** Builds a brand-new {code: {rate:price}} / {code: richSchedule} pair for every tariff, so
  *  switching tariffs back and forth in Settings never loses a tariff's own customized hours/prices
@@ -240,7 +280,8 @@ function freshEnergySettings(){
   return {
     currency:'PLN', extraFeesPerMonth:0, co2Factor:0.65,
     tariffCode:'G11', tariffPrices:prices, tariffSchedules:schedules,
-    exportPricePerKWh: 0.35, pvPriority:'home_first',
+    exportPricePerKWh: 0.35, pvPriority:'home_first', pvOrder:['home','battery','grid'],
+    exportLimitW:null, importLimitW:null, batteryReservePct:10,
     avgHouseholdKWhYear:2900,
     startDateISO: new Date().toISOString(),
   };
@@ -270,5 +311,11 @@ function migrateEnergySettings(raw){
   if (!raw.startDateISO) merged.startDateISO = base.startDateISO;
   if (!raw.pvPriority) merged.pvPriority = 'home_first';
   if (raw.exportPricePerKWh == null) merged.exportPricePerKWh = base.exportPricePerKWh;
+  // v3 -> v4: two-value pvPriority becomes a full 3-slot order (built from the LEGACY value, not the fresh default)
+  merged.pvOrder = SimulationEngine.normalizePvOrder(raw.pvOrder, raw.pvPriority);
+  merged.pvPriority = merged.pvOrder[0]==='battery' ? 'battery_first' : 'home_first';
+  merged.exportLimitW = raw.exportLimitW == null ? null : raw.exportLimitW;
+  merged.importLimitW = raw.importLimitW == null ? null : raw.importLimitW;
+  if (raw.batteryReservePct == null) merged.batteryReservePct = 0; // legacy saves discharged batteries down to 0 % - keep their behaviour
   return merged;
 }

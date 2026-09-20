@@ -115,12 +115,16 @@ class AnalyticsManager {
    *  cheap) and by the PV install UI's per-panel preview. */
   estimateDailySolarKWh(dayOfYear, skyFactor, panelsOverride){
     const panels = panelsOverride || this.getSolarInstances();
+    // foliage density (tree shade) depends on the season of the day being estimated, not on today's date
+    const sm = SolarCalculator.shadeModel, prevSeason = sm ? sm.season : null;
+    if (sm) sm.setSeason(SunPosition.seasonForDate(new Date(2025, 0, dayOfYear)));
     let kwh = 0;
     for (const p of panels){
       for (let m=0; m<1440; m+=15){
         kwh += EnergyCalculator.wattsMinutesToKWh(SolarCalculator.resolve(p, m, dayOfYear, skyFactor), 15);
       }
     }
+    if (sm && prevSeason) sm.setSeason(prevSeason);
     return kwh;
   }
 

@@ -1083,6 +1083,48 @@ const ModelFactory = (() => {
     g.userData.footprint=[1.0,1.65]; g.userData.flat=true; return g;
   };
 
+  // ---------- ELECTRICAL INSTALLATION ----------
+  // Wall elements face +Z (their local front); the group origin is the centre of the plate, so the placement
+  // rotation (RoomBuilder wall layout) simply turns them to face into the room.
+  B.elsocket = () => {
+    const g = grp();
+    const frame = box(0.09,0.09,0.02,0xf3f3ee,{rough:0.45,metal:0.02}); put(frame,0,0,0); g.add(frame);
+    for (const dy of [0.022,-0.022]){
+      const face = box(0.062,0.036,0.006,0xe6e6df,{rough:0.5,metal:0.02}); put(face,0,dy,0.012); g.add(face);
+      for (const dx of [-0.014,0.014]){ const hole = cyl(0.0035,0.0035,0.004,0x1a1a1a,8); put(hole,dx,dy,0.016,Math.PI/2,0,0); g.add(hole); }
+    }
+    const led = box(0.008,0.008,0.004,0x226644,{rough:0.3}); put(led,0.034,0.034,0.012); addGlow(g, led, 0x4ade80, 2.2); g.add(led);
+    g.userData.footprint=[0.09,0.03]; g.userData.wallMount=true; return g;
+  };
+  B.elstrip = () => {
+    const g = grp();
+    const body = box(0.34,0.035,0.06,0xf1f1ec,{rough:0.5,metal:0.02}); put(body,0,0.0175,0); g.add(body);
+    for (let i=0;i<5;i++){ const face = box(0.05,0.004,0.045,0x1f1f1f,{rough:0.6}); put(face,-0.135+i*0.0675,0.037,0); g.add(face); }
+    const sw = box(0.03,0.012,0.02,0xd94a4a,{rough:0.4}); put(sw,0.15,0.041,0.02); g.add(sw);
+    const led = box(0.006,0.004,0.006,0x226644,{rough:0.3}); put(led,0.15,0.038,-0.015); addGlow(g, led, 0x4ade80, 2.2); g.add(led);
+    const cable = cyl(0.007,0.007,0.25,0x2a2a2a,8); put(cable,-0.29,0.01,0,0,0,Math.PI/2); g.add(cable);
+    g.userData.footprint=[0.36,0.08]; return g;
+  };
+  B.elboard = () => {
+    const g = grp();
+    const body = box(0.60,0.80,0.12,0xdcdcd6,{rough:0.55,metal:0.05}); put(body,0,0,0); g.add(body);
+    const door = box(0.56,0.76,0.012,0xc9d3dc,{rough:0.25,metal:0.1,extra:{transparent:true,opacity:0.55}}); put(door,0,0,0.066); g.add(door);
+    for (const ry of [0.22,-0.02,-0.26]){                                     // three DIN rails
+      const rail = box(0.50,0.02,0.02,0x9aa0a6,{rough:0.4,metal:0.6}); put(rail,0,ry,0.03); g.add(rail);
+      for (let i=0;i<12;i++){ const m = box(0.03,0.075,0.05, i===0 ? 0xd94a4a : 0x5f6b7a,{rough:0.5}); put(m,-0.21+i*0.038,ry+0.005,0.052); g.add(m); }
+    }
+    const led = box(0.02,0.02,0.01,0x226644,{rough:0.3}); put(led,0.24,0.34,0.075); addGlow(g, led, 0x4ade80, 2.4); g.add(led);
+    g.userData.footprint=[0.6,0.14]; g.userData.wallMount=true; return g;
+  };
+  B.elmeter = () => {
+    const g = grp();
+    const body = box(0.22,0.32,0.11,0xe9e9e4,{rough:0.5,metal:0.05}); put(body,0,0,0); g.add(body);
+    const disp = box(0.14,0.06,0.006,0x0d2a1c,{rough:0.2}); put(disp,0,0.07,0.058); addGlow(g, disp, 0x5eead4, 1.4); g.add(disp);
+    const disc = cyl(0.045,0.045,0.006,0xb9c0c8,20); put(disc,0,-0.03,0.058,Math.PI/2,0,0); g.add(disc);
+    const term = box(0.16,0.04,0.02,0x3a3f45,{rough:0.6}); put(term,0,-0.13,0.05); g.add(term);
+    g.userData.footprint=[0.22,0.12]; g.userData.wallMount=true; return g;
+  };
+
   function fallback(){
     const g = grp();
     const b = box(0.3,0.3,0.3,0x66707f,{rough:0.6}); put(b,0,0.15,0); g.add(b);

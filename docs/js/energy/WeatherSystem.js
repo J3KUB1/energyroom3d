@@ -91,7 +91,7 @@ class WeatherSystem {
       this._maybeTriggerEvent(absMin);
     }
     if (this.active && absMin >= this.active.endAbsMin){
-      this.onLog(`Pogoda wraca do normy (koniec: ${this._eventName(this.active)}).`);
+      this.onLog(I18n.t('log.weatherNormal', { event: this._eventName(this.active) }));
       this.active = null;
       this.onEventChange(null);
     }

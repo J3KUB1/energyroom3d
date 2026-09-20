@@ -57,7 +57,40 @@ const I18n = {
     return this.lang==='pl' ? String(s).replace('.', ',') : String(s);
   },
 
+  /** Plural form for a count. Polish has 3 forms (1 / 2-4 except 12-14 / other), English 2.
+   *  Keys: '<key>.one', '<key>.few', '<key>.many' (PL) and '<key>.one', '<key>.other' (EN). The value may
+   *  contain {n}; it is replaced with the number itself. */
+  pluralForm(n){
+    n = Math.abs(Math.round(n));
+    if (this.lang === 'pl'){
+      if (n === 1) return 'one';
+      const m10 = n % 10, m100 = n % 100;
+      if (m10 >= 2 && m10 <= 4 && !(m100 >= 12 && m100 <= 14)) return 'few';
+      return 'many';
+    }
+    return n === 1 ? 'one' : 'other';
+  },
+  plural(key, n, params){
+    const form = this.pluralForm(n);
+    let str = this.t(key + '.' + form);
+    if (str === key + '.' + form) str = this.t(key + '.many') !== key + '.many' ? this.t(key + '.many') : this.t(key + '.other');
+    return str.replace(/\{n\}/g, this.num(n, Number.isInteger(n) ? 0 : 1)).replace(/\{(\w+)\}/g, (m, k)=> params && params[k] != null ? params[k] : m);
+  },
+  /** Educational text / data-source note of a catalog entry in the active language (Polish originals live in
+   *  data/*.js, English in i18n/catalog_en.js; missing translations fall back to the original, never to a blank). */
+  deviceEdu(def){ return (this.lang === 'en' && typeof CATALOG_EN !== 'undefined' && CATALOG_EN.edu[def.id]) || def.edu || ''; },
+  sourceNote(def){ return (this.lang === 'en' && typeof CATALOG_EN !== 'undefined' && CATALOG_EN.note[def.id]) || def.sourceNote || ''; },
+  /** Localised name of a companion evolution stage (falls back to the catalog name). */
+  petStage(stage){ const k = 'petstage.' + stage.atLevel; const v = this.t(k); return v === k ? stage.name : v; },
+  /** Localised default name of a room type ('room','garage','kitchen',...). */
+  roomType(type){ const k = 'roomtype.' + type; const v = this.t(k); return v === k ? type : v; },
+  /** Power / energy / money with the active language's decimal separator (dot vs comma). */
+  fmtW(w){ return w >= 1000 ? this.num(w/1000, 2) + ' kW' : Math.round(w) + ' W'; },
+  fmtKWh(k){ return this.num(k, 2) + ' kWh'; },
+  fmtMoney(v, cur){ return this.num(v, 2) + ' ' + (cur || 'PLN'); },
+
   deviceName(def){
+    if (def.nameKey){ const v = this.t(def.nameKey); if (v !== def.nameKey) return v; }
     if (this.lang==='en' && NAME_EN[def.id]) return NAME_EN[def.id];
     return def.name;
   },

@@ -38,6 +38,8 @@ class UIManager {
     this._bindPvInstallMode();
     this._bindScheduleModal();
     this._bindNewSimModal();
+    this._bindInstallation();
+    this._bindDesigner();
 
     this.transformManager.onSelect = (inst)=>this.renderProperties(inst);
     this.transformManager.onHover = (inst,e)=>this.renderTooltip(inst,e);
@@ -64,7 +66,7 @@ class UIManager {
     this.petManager.onLog = (msg)=> this.log(msg);
     this.petManager.onChange = ()=> this._renderPet();
     this.petManager.onLevelUp = (stage)=>{
-      this.toast(`🐾 ${this.petManager.name} ${I18n.t('pet.leveledUp', { level: this.petManager.level, stage: stage.name })}`, true);
+      this.toast(`🐾 ${this.petManager.name} ${I18n.t('pet.leveledUp', { level: this.petManager.level, stage: I18n.petStage(stage) })}`, true);
       this._playPetAnim('burst');
       this._renderPet();
     };
@@ -112,12 +114,14 @@ class UIManager {
     document.getElementById('btnLoad').addEventListener('click', ()=>{ this.projectManager.loadLocal(); this.transformManager.deselect(); this.renderRoomTabs(); });
     document.getElementById('btnRoomSettings').addEventListener('click', ()=>this.openRoomSettings());
     document.getElementById('btnSmartHome').addEventListener('click', ()=>this.openSmartHome());
+    document.getElementById('btnInstallation').addEventListener('click', ()=>this.openInstallation());
+    document.getElementById('btnDesigner').addEventListener('click', ()=>this.toggleDesigner());
     document.getElementById('btnDashboard').addEventListener('click', ()=>this.openDashboard());
     document.getElementById('btnSettings').addEventListener('click', ()=>this.openSettings());
 
     const nameLabel = document.getElementById('projectNameLabel');
     nameLabel.addEventListener('click', ()=>{
-      const v = prompt('Nazwa projektu / domu:', this.projectManager.projectName);
+      const v = prompt(I18n.t('msg.projectNamePrompt'), this.projectManager.projectName);
       if (v && v.trim()){ this.projectManager.projectName = v.trim(); nameLabel.textContent = v.trim(); }
     });
   }
@@ -135,15 +139,46 @@ class UIManager {
       const t = Number(e.target.value)/100;
       this.roomBuilder.setWallVisibility(t);
       const house = this.getHouseState(); house.wallVisibility = t; this.setHouseState(house);
-      document.getElementById('wallVisLabel').textContent = t<0.05 ? 'Otwarty' : (t>0.95 ? 'Zamknięty' : Math.round(t*100)+'%');
+      document.getElementById('wallVisLabel').textContent = t<0.05 ? I18n.t('nav.wallsOpen') : (t>0.95 ? I18n.t('nav.wallsClosed') : Math.round(t*100)+'%');
     });
+  }
+
+  /** Storey switcher (only shown when the house has more than one level or the designer is open). */
+  renderLevelTabs(){
+    const house = this.getHouseState(), wrap = document.getElementById('levelTabs');
+    const levels = BuildingModel.sortedLevels(house).reverse();
+    wrap.classList.toggle('hidden', levels.length < 2 && !this.designerOpen);
+    wrap.innerHTML = '';
+    for (const l of levels){
+      const b = document.createElement('button');
+      b.className = 'room-tab' + (l.id===house.activeLevelId && house.activeRoomId!=='__all__' ? ' active' : '');
+      b.textContent = '⬍ ' + l.name;
+      b.addEventListener('click', ()=>this.setActiveLevel(l.id));
+      wrap.appendChild(b);
+    }
+  }
+  setActiveLevel(levelId){
+    const house = this.getHouseState();
+    house.activeLevelId = levelId;
+    const cur = house.rooms.find(r=>r.id===house.activeRoomId);
+    if (!cur || cur.levelId !== levelId){
+      const first = BuildingModel.roomsOnLevel(house, levelId)[0];
+      house.activeRoomId = first ? first.id : '__all__';
+    }
+    this.setHouseState(house);
+    this.applyLevelView();
+    this.renderRoomTabs();
+    this._focusActiveRoom();
   }
 
   renderRoomTabs(){
     const house = this.getHouseState();
     const wrap = document.getElementById('roomTabs');
     wrap.innerHTML = '';
+    this.renderLevelTabs();
+    const multi = house.levels.length > 1;
     for (const r of house.rooms){
+      if (multi && r.levelId !== house.activeLevelId) continue;   // only this storey's rooms get tabs (the "whole house" tab shows all)
       const b = document.createElement('button');
       b.className = 'room-tab' + (r.id===house.activeRoomId ? ' active' : '');
       b.innerHTML = `${getRoomTypeMeta(r.type).icon} ${r.name}`;
@@ -152,20 +187,23 @@ class UIManager {
     }
     const allBtn = document.createElement('button');
     allBtn.className = 'room-tab' + (house.activeRoomId==='__all__' ? ' active' : '');
-    allBtn.innerHTML = '🏠 Cały dom';
+    allBtn.innerHTML = '🏠 ' + I18n.t('nav.wholeHouse');
     allBtn.addEventListener('click', ()=>this.setActiveRoom('__all__', true));
     wrap.appendChild(allBtn);
 
     const range = document.getElementById('wallVisRange');
     range.value = Math.round((house.wallVisibility ?? 1)*100);
-    document.getElementById('wallVisLabel').textContent = range.value<5?'Otwarty':(range.value>95?'Zamknięty':range.value+'%');
+    document.getElementById('wallVisLabel').textContent = range.value<5?I18n.t('nav.wallsOpen'):(range.value>95?I18n.t('nav.wallsClosed'):range.value+'%');
     this.renderCategoryTabs();
   }
 
   setActiveRoom(roomId, isOverview){
     const house = this.getHouseState();
     house.activeRoomId = roomId;
+    const room = house.rooms.find(r=>r.id===roomId);
+    if (room) house.activeLevelId = room.levelId;
     this.setHouseState(house);
+    this.applyLevelView();
     this.renderRoomTabs();
     this._focusActiveRoom(isOverview);
   }
@@ -173,16 +211,17 @@ class UIManager {
   _focusActiveRoom(isOverview){
     const house = this.getHouseState();
     if (isOverview || house.activeRoomId==='__all__'){
-      let minX=Infinity,maxX=-Infinity,maxZ=-Infinity,maxH=0;
+      let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity,maxH=0,minY=Infinity,maxY=-Infinity;
       for (const id in this.roomBuilder.bounds){
         const b = this.roomBuilder.bounds[id];
-        minX = Math.min(minX,b.offsetX); maxX = Math.max(maxX,b.offsetX+b.width); maxZ=Math.max(maxZ,b.length); maxH=Math.max(maxH,b.height);
+        minX = Math.min(minX,b.offsetX); maxX = Math.max(maxX,b.offsetX+b.width); minZ=Math.min(minZ,b.offsetZ); maxZ=Math.max(maxZ,b.offsetZ+b.length);
+        minY = Math.min(minY,b.elevation); maxY = Math.max(maxY,b.elevation+b.height);
       }
-      this.sceneManager.frameArea(minX, 0, maxX, maxZ, maxH);
+      this.sceneManager.frameArea(minX, minZ, maxX, maxZ, maxY-minY, minY);
       return;
     }
     const b = this.roomBuilder.bounds[house.activeRoomId];
-    if (b) this.sceneManager.frameArea(b.offsetX, 0, b.offsetX+b.width, b.length, b.height);
+    if (b) this.sceneManager.frameArea(b.offsetX, b.offsetZ, b.offsetX+b.width, b.offsetZ+b.length, b.height, b.elevation);
   }
 
   // ============================================================
@@ -193,7 +232,8 @@ class UIManager {
     wrap.innerHTML = '';
     const activeRoom = this.getActiveRoom();
     const cats = [...DEVICE_CATEGORIES.map(c=>({id:c.id, label:I18n.category(c.id)})), { id:'furniture', label:I18n.t('category.furniture') }];
-    if (activeRoom && activeRoom.type==='garage') cats.push({ id:'solar', label:I18n.t('category.solar') });
+    cats.push({ id:'installation', label:I18n.t('category.installation') });
+    if (activeRoom && BuildingModel.roofSlopes(this.getHouseState(), activeRoom).length) cats.push({ id:'solar', label:I18n.t('category.solar') });
     if (!cats.find(c=>c.id===this.currentCategory)) this.currentCategory = cats[0].id;
     for (const c of cats){
       const b = document.createElement('button');
@@ -248,6 +288,18 @@ class UIManager {
       }
       return;
     }
+    if (this.currentCategory==='installation'){
+      const ELICONS = { socket:'🔌', power_strip:'🧷', switchboard:'🗄', meter:'🔢' };
+      for (const def of ELECTRICAL_DEFINITIONS){
+        const card = document.createElement('div');
+        card.className = 'asset-card';
+        const price = def.priceZl + def.laborZl;
+        card.innerHTML = `<div class="asset-icon">${ELICONS[def.id]||'⚡'}</div><div class="asset-name">${I18n.deviceName(def)}</div><div class="asset-power" style="color:var(--accent-power)">${price>0 ? I18n.num(price,0)+' zł' : I18n.t('elec.operatorOwned')}</div>`;
+        card.addEventListener('click', ()=>{ this._placeElectrical(def.id); if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open'); });
+        grid.appendChild(card);
+      }
+      return;
+    }
     if (this.currentCategory==='furniture'){
       const room = this.getActiveRoom();
       const roomType = room ? room.type : null;
@@ -267,23 +319,25 @@ class UIManager {
     const card = document.createElement('div');
     card.className='asset-card';
     card.innerHTML = `<div class="asset-icon">${icon}</div><div class="asset-name">${name}</div>` +
-      (powerW!=null ? `<div class="asset-power">${EnergyCalculator.fmtW(powerW)}</div>` : `<div class="asset-power">meble</div>`);
+      (powerW!=null ? `<div class="asset-power">${EnergyCalculator.fmtW(powerW)}</div>` : `<div class="asset-power">${I18n.t("ui.furnitureTag")}</div>`);
     card.addEventListener('click', ()=>{
       const room = this.getActiveRoom();
-      if (!room || room.id==='__all__'){ this.toast('Wybierz konkretny pokój, aby dodać obiekt.'); return; }
+      if (!room || room.id==='__all__'){ this.toast(I18n.t('msg.pickRoomObject')); return; }
       const pos = { x: room.settings.width/2, y:0, z: room.settings.length/2 };
       const inst = isFurniture ? this.objectManager.addFurniture(defId,pos,room.id) : this.objectManager.addDevice(defId,pos,room.id);
-      if (inst){ this.transformManager.select(inst.id); this.projectManager.pushHistory(); this.log(`Dodano: ${inst.def.name}`); if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open'); }
+      if (inst){ this.transformManager.select(inst.id); this.projectManager.pushHistory(); this.log(I18n.t('log.added', { name: I18n.deviceName(inst.def) })); if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open'); }
     });
     return card;
   }
 
   _placeSolarPanel(defId){
     const room = this.getActiveRoom();
-    if (!room || room.type!=='garage'){ this.toast('Przełącz się na Garaż, aby montować panele na dachu.'); return; }
-    const roof = this.roomBuilder.roofGroups[room.id];
-    if (!roof){ this.toast('Ten pokój nie ma jeszcze dachu skośnego.'); return; }
-    const existing = this.objectManager.getSolar(room.id).length;
+    if (!room || room.id==='__all__'){ this.toast(I18n.t('msg.pickRoomObject')); return; }
+    if (!BuildingModel.roofSlopes(this.getHouseState(), room).length){ this.toast(I18n.t('msg.noPvRoof')); return; }
+    const slopeKey = (room.design.roof.type==='gable' && room.design.roof.pvSlope==='b') ? 'b' : 'a';
+    const roof = this.roomBuilder.roofGroups[slopeKey==='b' ? room.id+'#b' : room.id];
+    if (!roof){ this.toast(I18n.t('msg.noSlopedRoof')); return; }
+    const existing = this.objectManager.getSolar(room.id).filter(p=>(p.slope||'a')===slopeKey).length;
     const cols = Math.max(1, Math.floor((roof.userData.span.w) / 1.06));
     const col = existing % cols, row = Math.floor(existing / cols);
     const panelW=1.0, panelL=1.65, gap=0.06;
@@ -292,11 +346,11 @@ class UIManager {
     const lx = startX + col*(panelW+gap), lz = startZ + row*(panelL+gap);
     // ObjectManager auto-parents solar panels to this room's roof group (see getRoofGroup hook
     // in main.js), so a plain addSolar with roof-local x/z is all that's needed here.
-    const inst = this.objectManager.addSolar(defId, {x:lx, y:roof.userData.surfaceY, z:lz}, room.id);
+    const inst = this.objectManager.addSolar(defId, {x:lx, y:roof.userData.surfaceY, z:lz}, room.id, slopeKey);
     if (!inst) return;
     this.transformManager.select(inst.id);
     this.projectManager.pushHistory();
-    this.log(`Zamontowano panel PV na dachu: ${room.name}`);
+    this.log(I18n.t('log.pvMounted', { room: room.name }));
     const totalPanels = this.objectManager.getSolar().length;
     this.petManager.awardPVInstalled(totalPanels);
     this.questManager.checkMilestones(this._questCtx());
@@ -306,13 +360,13 @@ class UIManager {
 
   _placeBattery(defId){
     const room = this.getActiveRoom();
-    if (!room || room.id==='__all__'){ this.toast('Wybierz konkretny pokój, aby dodać magazyn energii.'); return; }
+    if (!room || room.id==='__all__'){ this.toast(I18n.t('msg.pickRoomBattery')); return; }
     const pos = { x: room.settings.width*0.5, y:0, z: room.settings.length*0.5 };
     const inst = this.objectManager.addBattery(defId, pos, room.id);
     if (!inst) return;
     this.transformManager.select(inst.id);
     this.projectManager.pushHistory();
-    this.log(`Dodano magazyn energii: ${I18n.deviceName(inst.def)}`);
+    this.log(I18n.t('log.batteryAdded', { name: I18n.deviceName(inst.def) }));
     this.questManager.checkMilestones(this._questCtx());
     if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open');
   }
@@ -330,7 +384,7 @@ class UIManager {
     document.getElementById('btnFocus').addEventListener('click', ()=>this._focusSelected());
     document.getElementById('btnDuplicate').addEventListener('click', ()=>this._duplicateSelected());
     document.getElementById('btnDelete').addEventListener('click', ()=>this._deleteSelected());
-    document.getElementById('chkGrid').addEventListener('change', (e)=>this.sceneManager.setGridVisible(e.target.checked));
+    document.getElementById('chkGrid').addEventListener('change', (e)=>this.roomBuilder.setGridVisible(e.target.checked));
     document.getElementById('chkSnap').addEventListener('change', (e)=>this.transformManager.setSnap(e.target.checked));
     document.getElementById('gridSnapSelect').addEventListener('change', (e)=>this.transformManager.setGridSnap(Number(e.target.value)));
     document.getElementById('rotSnapSelect').addEventListener('change', (e)=>this.transformManager.setRotSnap(Number(e.target.value)));
@@ -340,9 +394,24 @@ class UIManager {
     const dn = document.getElementById('dayNightRange');
     dn.addEventListener('input', ()=>{
       this.sceneManager.setDayNight(Number(dn.value));
-      document.getElementById('dayNightLabel').textContent = ScheduleManager.fromMinutes(Number(dn.value)*60);
+      this.updateDayNightLabel(false);
     });
     this.sceneManager.setDayNight(Number(dn.value));
+    this.updateDayNightLabel(false);
+    I18n.onChange(()=>this.updateDayNightLabel(true));
+  }
+
+  /** Slider + label: "10:30 · Poranek". fromSim=true -> follow the simulation clock, false -> the user's manual preview. */
+  updateDayNightLabel(fromSim){
+    const dn = document.getElementById('dayNightRange'), lbl = document.getElementById('dayNightLabel');
+    if (!dn || !lbl) return;
+    const hour = fromSim && this.sceneManager._hour != null ? this.sceneManager._hour : Number(dn.value);
+    if (fromSim) dn.value = hour.toFixed(1);
+    const st = this.sceneManager.sunState;
+    const phase = st ? I18n.t('phase.' + st.phase) : '';
+    lbl.textContent = ScheduleManager.fromMinutes(Math.round(hour*60)) + (phase ? ' · ' + phase : '');
+    if (st) lbl.title = I18n.t('phase.tooltip', { sunrise: ScheduleManager.fromMinutes(Math.round(st.sunriseHour*60)),
+      sunset: ScheduleManager.fromMinutes(Math.round(st.sunsetHour*60)), elevation: I18n.num(st.elevationDeg, 0) });
   }
 
   // ============================================================
@@ -361,7 +430,7 @@ class UIManager {
     this.objectManager.setManualOverride(id, isOn ? 'off' : 'on');
     this._nudgeSim();
     this.projectManager.pushHistory();
-    this.log(`${inst.customName||inst.def.name}: ${isOn?'wyłączono':'włączono'} (podwójne kliknięcie)`);
+    this.log(I18n.t(isOn?'log.dblOff':'log.dblOn', { name: inst.customName||I18n.deviceName(inst.def) }));
     if (this.transformManager.selectedId === id) this.renderProperties(inst);
   }
   /** Shows the continuous sky condition normally (section 10), switching to the more urgent
@@ -400,7 +469,7 @@ class UIManager {
     document.getElementById('petFeedBtn').addEventListener('click', ()=>{
       const ok = this.petManager.feed();
       if (ok){ this._playPetAnim('pulse'); this._renderPet(); }
-      else this.toast('Poczekaj chwilę, zanim znów nakarmisz zwierzaka.');
+      else this.toast(I18n.t('msg.petWait'));
     });
     document.querySelectorAll('.pet-tab').forEach(t=>{
       t.addEventListener('click', ()=>{
@@ -420,7 +489,7 @@ class UIManager {
     document.getElementById('petLevelBadge').textContent = pm.level;
     document.getElementById('petLevelNum').textContent = pm.level;
     document.getElementById('petMaxLabel').textContent = pm.level>=50 ? '★ MAX' : '';
-    document.getElementById('petStageName').textContent = stage.name;
+    document.getElementById('petStageName').textContent = I18n.petStage(stage);
     document.getElementById('petNameInput').value = pm.name;
     document.getElementById('petXpFill').style.width = pm.xpPct+'%';
     document.getElementById('petXpLabel').textContent = pm.xpToNext===Infinity
@@ -428,7 +497,7 @@ class UIManager {
     document.getElementById('petMoodFill').style.width = Math.round(pm.mood)+'%';
     const tricks = document.getElementById('petTricks');
     tricks.innerHTML = pm.unlockedTricks.map(t=>`<button class="trick-btn" data-trick="${t.id}">✨ ${I18n.t(t.labelKey)}</button>`).join('')
-      || '<div style="font-size:11px;color:var(--text-3)">Kolejne sztuczki odblokują się wraz z poziomem.</div>';
+      || ('<div style="font-size:11px;color:var(--text-3)">' + I18n.t('msg.petTricksLater') + '</div>');
     tricks.querySelectorAll('[data-trick]').forEach(b=>{
       b.addEventListener('click', ()=> this._playPetAnim(b.dataset.trick));
     });
@@ -499,7 +568,7 @@ class UIManager {
   _duplicateSelected(){
     if (!this.transformManager.selectedId) return;
     const copy = this.objectManager.duplicate(this.transformManager.selectedId);
-    if (copy){ this.transformManager.select(copy.id); this.projectManager.pushHistory(); this.log(`Zduplikowano: ${copy.def.name}`); }
+    if (copy){ this.transformManager.select(copy.id); this.projectManager.pushHistory(); this.log(I18n.t('log.duplicated', { name: I18n.deviceName(copy.def) })); }
   }
   _deleteSelected(){
     const id = this.transformManager.selectedId; if (!id) return;
@@ -507,7 +576,7 @@ class UIManager {
     this.objectManager.remove(id);
     this.transformManager.deselect();
     this.projectManager.pushHistory();
-    if (inst) this.log(`Usunięto: ${inst.def.name}`);
+    if (inst) this.log(I18n.t('log.removed', { name: I18n.deviceName(inst.def) }));
   }
 
   // ============================================================
@@ -525,7 +594,7 @@ class UIManager {
       else if (e.key.toLowerCase()==='e'){ this._setGizmoMode('rotate'); }
       else if (e.key.toLowerCase()==='r'){ this._setGizmoMode('scale'); }
       else if (e.key.toLowerCase()==='f'){ this._focusSelected(); }
-      else if (e.key.toLowerCase()==='g'){ const c=document.getElementById('chkGrid'); c.checked=!c.checked; this.sceneManager.setGridVisible(c.checked); }
+      else if (e.key.toLowerCase()==='g'){ const c=document.getElementById('chkGrid'); c.checked=!c.checked; this.roomBuilder.setGridVisible(c.checked); }
       else if (e.key==='Escape'){ this.transformManager.deselect(); this._closeAllModals(); }
       else if (e.key===' '){ e.preventDefault(); if (this.currentMode==='sim'){ document.getElementById('playPauseBtn').click(); } }
     });
@@ -545,31 +614,38 @@ class UIManager {
     tip.style.left = (e.clientX+16)+'px';
     tip.style.top = (e.clientY+12)+'px';
     if (inst.kind==='furniture'){
-      tip.innerHTML = `<b>${inst.customName||inst.def.name}</b><div class="t-row"><span>Typ</span><b>Meble</b></div>`;
+      tip.innerHTML = `<b>${inst.customName||inst.def.name}</b><div class="t-row"><span>${I18n.t('ui.type')}</span><b>${I18n.t('ui.furniture')}</b></div>`;
       return;
     }
     if (inst.kind==='solar'){
       const gen = -inst.runtime.powerW;
       tip.innerHTML = `<b>${inst.customName||inst.def.name}</b>
-        <div class="t-row"><span>Produkcja teraz</span><b style="color:var(--accent-good)">${EnergyCalculator.fmtW(Math.max(0,gen))}</b></div>
-        <div class="t-row"><span>Moc szczytowa</span><b>${EnergyCalculator.fmtW(inst.def.peakPowerW)}</b></div>`;
+        <div class="t-row"><span>${I18n.t('ui.production_now')}</span><b style="color:var(--accent-good)">${EnergyCalculator.fmtW(Math.max(0,gen))}</b></div>
+        <div class="t-row"><span>${I18n.t('ui.peak_power')}</span><b>${EnergyCalculator.fmtW(inst.def.peakPowerW)}</b></div>`;
       return;
     }
     if (inst.kind==='battery'){
       const soc = inst.runtime.socKWh ?? inst.def.capacityKWh*0.5;
       const pct = Math.round(soc/inst.def.capacityKWh*100);
       tip.innerHTML = `<b>${inst.customName||inst.def.name}</b>
-        <div class="t-row"><span>Naładowanie</span><b>${pct}%</b></div>
-        <div class="t-row"><span>Stan</span><b>${inst.runtime.state||'idle'}</b></div>`;
+        <div class="t-row"><span>${I18n.t('ui.state_of_charge')}</span><b>${pct}%</b></div>
+        <div class="t-row"><span>${I18n.t('ui.state')}</span><b>${inst.runtime.state||'idle'}</b></div>`;
+      return;
+    }
+    if (inst.kind==='electrical'){
+      const live = inst.runtime.state==='live';
+      tip.innerHTML = `<b>${InstallationPanel.esc(inst.customName||I18n.deviceName(inst.def))}</b>
+        <div class="t-row"><span>${I18n.t('ui.state')}</span><b style="color:${live?'var(--accent-good)':'var(--accent-danger)'}">${live ? I18n.t('elec.status.live') : I18n.t('elec.status.'+(inst.runtime.status||'noSupply'))}</b></div>
+        ${inst.def.type==='socket' || inst.def.type==='strip' ? `<div class="t-row"><span>${I18n.t('elec.current')}</span><b>${I18n.num(inst.runtime.currentA||0,2)} A</b></div>` : ''}`;
       return;
     }
     const today = this.simulationEngine.todayKWhByDevice[inst.id]||0;
     const moLabel = inst.manualOverride ? ` <span style="color:${inst.manualOverride==='on'?'var(--accent-good)':'var(--accent-danger)'}">(wymuszono ${inst.manualOverride.toUpperCase()})</span>` : '';
     tip.innerHTML = `<b>${inst.customName||inst.def.name}</b>
-      <div class="t-row"><span>Moc</span><b>${EnergyCalculator.fmtW(inst.runtime.powerW||0)}</b></div>
-      <div class="t-row"><span>Stan</span><b>${inst.runtime.state}${moLabel}</b></div>
-      <div class="t-row"><span>Dzisiaj</span><b>${EnergyCalculator.fmtKWh(today)}</b></div>
-      <div style="margin-top:6px;font-size:10.5px;color:var(--text-3)">Kliknij dwukrotnie, aby przełączyć zasilanie</div>`;
+      <div class="t-row"><span>${I18n.t('ui.power')}</span><b>${EnergyCalculator.fmtW(inst.runtime.powerW||0)}</b></div>
+      <div class="t-row"><span>${I18n.t('ui.state')}</span><b>${inst.runtime.state}${moLabel}</b></div>
+      <div class="t-row"><span>${I18n.t('ui.today')}</span><b>${EnergyCalculator.fmtKWh(today)}</b></div>
+      <div style="margin-top:6px;font-size:10.5px;color:var(--text-3)">${I18n.t('ui.double_click_to_toggle_power')}</div>`;
   }
 
   // ============================================================
@@ -595,30 +671,31 @@ class UIManager {
     const isDevice = inst.kind==='device';
     const isSolar = inst.kind==='solar';
     const isBattery = inst.kind==='battery';
-    let html = `<input class="prop-name-input" id="propNameInput" value="${(inst.customName||inst.def.name)}">`;
+    const isElectrical = inst.kind==='electrical';
+    let html = `<input class="prop-name-input" id="propNameInput" value="${InstallationPanel.esc(inst.customName||I18n.deviceName(inst.def))}">`;
 
     if (isBattery){
       const def = inst.def;
       const soc = inst.runtime.socKWh ?? def.capacityKWh*0.5;
       const socPct = Math.round((soc/def.capacityKWh)*100);
       const state = inst.runtime.state||'idle';
-      const stateLabel = state==='charging' ? '🔌 Ładowanie' : state==='discharging' ? '⚡ Rozładowanie' : '⏸ Bezczynny';
+      const stateLabel = state==='charging' ? '🔌 ' + I18n.t('battery.charging') : state==='discharging' ? '⚡ ' + I18n.t('battery.discharging') : '⏸ ' + I18n.t('battery.idle');
       const pw = inst.runtime.powerW||0;
       html += `
       <div class="prop-section">
-        <h4>Magazyn energii</h4>
-        <div class="prop-row"><span class="lbl">Producent</span><span class="val">${def.manufacturer}</span></div>
-        <div class="prop-row"><span class="lbl">Pojemność</span><span class="val">${def.capacityKWh} kWh</span></div>
-        <div class="prop-row"><span class="lbl">Stan</span><span class="val">${stateLabel}</span></div>
-        <div class="prop-row"><span class="lbl">Moc teraz</span><span class="val" style="color:${pw>0?'var(--accent-power)':pw<0?'var(--accent-good)':'var(--text-2)'}">${pw>0?'+':''}${EnergyCalculator.fmtW(pw)}</span></div>
+        <h4>${I18n.t('ui.energy_storage')}</h4>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.manufacturer')}</span><span class="val">${def.manufacturer}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.capacity')}</span><span class="val">${def.capacityKWh} kWh</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.state')}</span><span class="val">${stateLabel}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.power_now')}</span><span class="val" style="color:${pw>0?'var(--accent-power)':pw<0?'var(--accent-good)':'var(--text-2)'}">${pw>0?'+':''}${EnergyCalculator.fmtW(pw)}</span></div>
         <div class="soc-bar"><div class="soc-fill" style="width:${socPct}%"></div></div>
-        <div class="prop-row"><span class="lbl">Naładowanie</span><span class="val">${socPct}% (${soc.toFixed(1)} / ${def.capacityKWh} kWh)</span></div>
-        <div class="toggle-row"><span class="lbl">Podłączony</span>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.state_of_charge')}</span><span class="val">${socPct}% (${soc.toFixed(1)} / ${def.capacityKWh} kWh)</span></div>
+        <div class="toggle-row"><span class="lbl">${I18n.t('ui.connected')}</span>
           <label class="switch"><input type="checkbox" id="propConnected" ${inst.connected?'checked':''}><span class="slider-tog"></span></label>
         </div>
-        <div style="margin-top:6px"><span class="badge estimated">ESTIMATED</span></div>
-        <div style="font-size:11px;color:var(--text-3);margin-top:6px">${def.sourceNote}</div>
-        <div style="font-size:11px;color:var(--text-3);margin-top:6px">Ładuje się z nadwyżki paneli PV, rozładowuje gdy zużycie przewyższa produkcję - ogranicza pobór z sieci.</div>
+        <div style="margin-top:6px"><span class="badge estimated">${I18n.t('ui.badge.estimated')}</span></div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:6px">${I18n.sourceNote(def)}</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:6px">${I18n.t('ui.it_charges_from_pv_surplus_and_dis')}</div>
       </div>`;
     } else if (isSolar){
       const def = inst.def;
@@ -632,15 +709,20 @@ class UIManager {
       html += `
       <div class="prop-section">
         <h4>${I18n.t('panel.pv')}</h4>
-        <div class="prop-row"><span class="lbl">Producent</span><span class="val">${def.manufacturer}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.manufacturer')}</span><span class="val">${def.manufacturer}</span></div>
         <div class="prop-row"><span class="lbl">Model</span><span class="val">${def.model}</span></div>
         <div class="prop-row"><span class="lbl">${I18n.t('pv.panelPower')}</span><span class="val">${EnergyCalculator.fmtW(def.peakPowerW)}</span></div>
         <div class="prop-row"><span class="lbl">${I18n.t('panel.currentProduction')}</span><span class="val" style="color:var(--accent-good)">${EnergyCalculator.fmtW(gen)}</span></div>
-        <div class="toggle-row"><span class="lbl">Podłączony do falownika</span>
+        ${(()=>{ const da = inst.runtime.directAccess==null ? 1 : inst.runtime.directAccess; const pct = Math.round(da*100);
+          const col = pct>=90 ? 'var(--accent-good)' : pct>=50 ? 'var(--accent-power)' : 'var(--accent-danger)';
+          return `<div class="prop-row"><span class="lbl">${I18n.t('pv.directAccess')}</span><span class="val" style="color:${col}">${pct}%</span></div>
+        <div class="aim-bar"><div class="aim-fill" style="width:${pct}%;background:${col}"></div></div>
+        <div style="font-size:11px;color:var(--text-3);margin:4px 0 6px">${I18n.t('pv.shadeNote')}</div>`; })()}
+        <div class="toggle-row"><span class="lbl">${I18n.t('ui.connected_to_the_inverter')}</span>
           <label class="switch"><input type="checkbox" id="propConnected" ${inst.connected?'checked':''}><span class="slider-tog"></span></label>
         </div>
-        <div style="margin-top:6px"><span class="badge estimated">ESTIMATED</span></div>
-        <div style="font-size:11px;color:var(--text-3);margin-top:6px">${def.sourceNote}</div>
+        <div style="margin-top:6px"><span class="badge estimated">${I18n.t('ui.badge.estimated')}</span></div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:6px">${I18n.sourceNote(def)}</div>
       </div>
       <div class="prop-section">
         <h4>${I18n.t('pv.orientation')} &amp; ${I18n.t('pv.tilt')}</h4>
@@ -652,70 +734,73 @@ class UIManager {
       </div>`;
     } else if (isDevice){
       const def = inst.def;
-      const dsBadge = def.dataSource==='manufacturer' ? '<span class="badge manufacturer">MANUFACTURER</span>' : '<span class="badge estimated">ESTIMATED</span>';
+      const dsBadge = def.dataSource==='manufacturer' ? '<span class="badge manufacturer">' + I18n.t('ui.badge.manufacturer') + '</span>' : '<span class="badge estimated">' + I18n.t('ui.badge.estimated') + '</span>';
       const dailyKWh = (this.simulationEngine.todayKWhByDevice[inst.id]||0);
       const s = this.getEnergySettings();
       const rate = EnergyCalculator.priceAt(this.simulationEngine.absMin, s);
       const mo = inst.manualOverride;
       html += `
       <div class="prop-section">
-        <h4>Power</h4>
+        <h4>${I18n.t('ui.powerSection')}</h4>
         <div class="power-switch">
           <button class="ps-btn ${!mo?'active':''}" data-val="auto">🕐 Auto</button>
-          <button class="ps-btn on ${mo==='on'?'active':''}" data-val="on">⏻ ON</button>
-          <button class="ps-btn off ${mo==='off'?'active':''}" data-val="off">⏻ OFF</button>
+          <button class="ps-btn on ${mo==='on'?'active':''}" data-val="on">${I18n.t('ui.powerOn')}</button>
+          <button class="ps-btn off ${mo==='off'?'active':''}" data-val="off">${I18n.t('ui.powerOff')}</button>
         </div>
-        <div style="font-size:11px;color:var(--text-3);margin-top:7px">${mo ? 'Wymuszono ręcznie — ignoruje harmonogram, dopóki nie wrócisz do "Auto".' : 'Tryb automatyczny — urządzenie działa wg harmonogramu poniżej.'}</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:7px">${mo ? I18n.t('msg.forcedManual') : I18n.t('msg.autoMode')}</div>
       </div>
       <div class="prop-section">
-        <h4>Device</h4>
-        <div class="prop-row"><span class="lbl">Producent</span><span class="val">${def.manufacturer}</span></div>
+        <h4>${I18n.t('ui.deviceSection')}</h4>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.manufacturer')}</span><span class="val">${def.manufacturer}</span></div>
         <div class="prop-row"><span class="lbl">Model</span><span class="val">${def.model}</span></div>
-        <div class="prop-row"><span class="lbl">Moc</span><span class="val">${EnergyCalculator.fmtW(inst.runtime.powerW||0)}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.power')}</span><span class="val">${EnergyCalculator.fmtW(inst.runtime.powerW||0)}</span></div>
         <div class="prop-row"><span class="lbl">Standby</span><span class="val">${EnergyCalculator.fmtW(def.standbyPowerW)}</span></div>
-        <div class="prop-row"><span class="lbl">Stan</span><span class="val">
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.state')}</span><span class="val">
           <span class="state-pill"><span class="state-dot" style="background:${this._stateColor(inst.runtime.state)}"></span>${inst.runtime.state}</span>
         </span></div>
-        <div class="prop-row"><span class="lbl">Dzisiejsza energia</span><span class="val">${EnergyCalculator.fmtKWh(dailyKWh)}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.energy_today')}</span><span class="val">${EnergyCalculator.fmtKWh(dailyKWh)}</span></div>
         <div class="prop-row"><span class="lbl">${I18n.t('tariff.currentRate')}</span><span class="val">${rate.toFixed(2)} ${s.currency}/kWh ${EnergyCalculator.isCheapRateAt(this.simulationEngine.absMin,s)?'🟢':EnergyCalculator.isExpensiveRateAt(this.simulationEngine.absMin,s)?'🔴':''} <span class="tariff-code-pill">${s.tariffCode}</span></span></div>
-        <div class="toggle-row"><span class="lbl">Podłączone do gniazdka</span>
+        ${this._deviceSupplyHtml(inst)}
+        <div class="toggle-row"><span class="lbl">${I18n.t('ui.plugged_into_a_socket')}</span>
           <label class="switch"><input type="checkbox" id="propConnected" ${inst.connected?'checked':''}><span class="slider-tog"></span></label>
         </div>
         <div style="margin-top:6px">${dsBadge}</div>
-        <button class="small-btn edu-btn" id="propEduBtn">💡 Jak działa zużycie energii?</button>
+        <button class="small-btn edu-btn" id="propEduBtn">${I18n.t('ui.how_does_energy_consumption_work')}</button>
       </div>`;
+    } else if (isElectrical){
+      html += this._electricalPropsHtml(inst);
     } else {
-      html += `<div class="prop-section"><h4>Furniture</h4>
-        <div class="prop-row"><span class="lbl">Typ</span><span class="val">Meble</span></div>
-        <div class="prop-row"><span class="lbl">Wpływ na energię</span><span class="val">brak</span></div>
+      html += `<div class="prop-section"><h4>${I18n.t('ui.furnitureSection')}</h4>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.type')}</span><span class="val">${I18n.t('ui.furniture')}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.energy_impact')}</span><span class="val">${I18n.t('ui.none')}</span></div>
       </div>`;
     }
 
     html += `
     <div class="prop-section">
-      <h4>Transform ${isSolar?'<span style="color:var(--text-3);font-weight:400;text-transform:none;font-size:10.5px">(lokalnie względem dachu)</span>':''}</h4>
+      <h4>Transform ${isSolar?'<span style="color:var(--text-3);font-weight:400;text-transform:none;font-size:10.5px">' + I18n.t('ui.local_to_the_roof') + '</span>':''}</h4>
       <div class="xyz-head"><span></span><span>X</span><span>Y</span><span>Z</span></div>
-      <div class="xyz-grid"><span class="axis-lbl">Pos</span>
+      <div class="xyz-grid"><span class="axis-lbl">${I18n.t('ui.pos')}</span>
         <input type="number" step="0.05" id="posX"><input type="number" step="0.05" id="posY"><input type="number" step="0.05" id="posZ"></div>
-      <div class="xyz-grid"><span class="axis-lbl">Rot°</span>
+      <div class="xyz-grid"><span class="axis-lbl">${I18n.t('ui.rot')}</span>
         <input type="number" step="1" id="rotX"><input type="number" step="1" id="rotY"><input type="number" step="1" id="rotZ"></div>
-      <div class="xyz-grid"><span class="axis-lbl">Scale</span>
+      <div class="xyz-grid"><span class="axis-lbl">${I18n.t('ui.scaleLbl')}</span>
         <input type="number" step="0.05" id="scaX"><input type="number" step="0.05" id="scaY"><input type="number" step="0.05" id="scaZ"></div>
-      <button class="small-btn" id="propReset">Resetuj transformację</button>
+      <button class="small-btn" id="propReset">${I18n.t('ui.reset_transform')}</button>
     </div>`;
 
     if (isDevice){
       const def = inst.def;
       html += `
       <div class="prop-section">
-        <h4>Energy</h4>
-        <div class="prop-row"><span class="lbl">Rated Power</span><span class="val">${EnergyCalculator.fmtW(def.ratedPowerW)}</span></div>
-        <div class="prop-row"><span class="lbl">Typical Power</span><span class="val">${EnergyCalculator.fmtW(Object.values(def.states).find(v=>v>0)||0)}</span></div>
-        <div class="prop-row"><span class="lbl">Standby Power</span><span class="val">${EnergyCalculator.fmtW(def.standbyPowerW)}</span></div>
-        ${def.cycleEnergyKWh!=null ? `<div class="prop-row"><span class="lbl">Cycle Energy</span><span class="val">${def.cycleEnergyKWh} kWh</span></div>`:''}
-        <div class="prop-row"><span class="lbl">Klasa energ.</span><span class="val">${def.energyClass}</span></div>
-        <div class="prop-row"><span class="lbl">Źródło danych</span><span class="val">${def.dataSource}</span></div>
-        <div style="font-size:11px;color:var(--text-3);margin-top:4px">${def.sourceNote}</div>
+        <h4>${I18n.t('ui.energySection')}</h4>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.ratedPower')}</span><span class="val">${EnergyCalculator.fmtW(def.ratedPowerW)}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.typicalPower')}</span><span class="val">${EnergyCalculator.fmtW(Object.values(def.states).find(v=>v>0)||0)}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.standbyPower')}</span><span class="val">${EnergyCalculator.fmtW(def.standbyPowerW)}</span></div>
+        ${def.cycleEnergyKWh!=null ? `<div class="prop-row"><span class="lbl">${I18n.t('ui.cycleEnergy')}</span><span class="val">${def.cycleEnergyKWh} kWh</span></div>`:''}
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.energy_class')}</span><span class="val">${def.energyClass}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.data_source')}</span><span class="val">${def.dataSource}</span></div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:4px">${I18n.sourceNote(def)}</div>
       </div>
       <div class="prop-section">
         <h4>${I18n.t('sched.title')}</h4>
@@ -744,6 +829,8 @@ class UIManager {
       const connEl = document.getElementById('propConnected');
       if (connEl) connEl.addEventListener('change', (e)=>{ this.objectManager.setConnected(inst.id, e.target.checked); this._nudgeSim(); this.projectManager.pushHistory(); });
     }
+    if (isDevice) this._bindDeviceSupply(inst);
+    if (isElectrical) this._bindElectricalProps(inst);
     if (isDevice){
       content.querySelectorAll('.ps-btn').forEach(btn=>{
         btn.addEventListener('click', ()=>{
@@ -751,7 +838,7 @@ class UIManager {
           this._nudgeSim();
           this.projectManager.pushHistory();
           this.renderProperties(inst);
-          this.log(`${inst.customName||inst.def.name}: tryb zasilania → ${btn.dataset.val}`);
+          this.log(I18n.t('log.powerMode', { name: inst.customName||I18n.deviceName(inst.def), mode: btn.dataset.val }));
         });
       });
       document.getElementById('propEduBtn').addEventListener('click', ()=>this.openEdu(inst));
@@ -763,6 +850,181 @@ class UIManager {
         this.renderProperties(inst);
       });
     }
+  }
+
+  // ============================================================
+  // HOUSE DESIGNER
+  // ============================================================
+  _bindDesigner(){
+    this.designerOpen = false;
+    this.designer = new DesignerPanel(document.getElementById('designerBody'), {
+      getHouse: ()=>this.getHouseState(),
+      onChange: (kind)=>this._designerChanged(kind),
+      onAddRoom: (type, levelId)=>this._addRoom(type, levelId),
+      onRemoveRoom: (id)=>{ this._removeRoom(id); this.designer.render(); },
+      onFocusRoom: (id)=>this.setActiveRoom(id),
+      onOpeningState: (roomId, opId, open)=>this.roomBuilder.setOpening(roomId, opId, open),
+      onClose: ()=>this.toggleDesigner(false),
+    });
+    I18n.onChange(()=>{ if (this.designerOpen) this.designer.render(); });
+  }
+  toggleDesigner(force){
+    this.designerOpen = force != null ? force : !this.designerOpen;
+    document.getElementById('designerDock').classList.toggle('hidden', !this.designerOpen);
+    document.getElementById('btnDesigner').classList.toggle('active', this.designerOpen);
+    if (this.designerOpen){ this.designer.msg = null; this.designer.render(); }
+    this.renderLevelTabs();
+  }
+  /** An edit in the designer: rebuild the 3D house, keep the installation inside the new walls, record undo history. */
+  _designerChanged(kind){
+    const house = this.getHouseState();
+    BuildingModel.migrateHouse(house);
+    this.setHouseState(house);
+    if (kind === 'levelView'){ this.applyLevelView(); this.renderRoomTabs(); return; }
+    if (kind === 'openState'){ this.projectManager.pushHistory(); return; }
+    this.rebuildHouse();
+    this._fitElectricalToRooms();
+    this.electrical.prune();
+    this.projectManager.pushHistory();
+    this.renderRoomTabs();
+    this._nudgeSim();
+    if (this.transformManager.selectedId){ const inst = this.objectManager.find(this.transformManager.selectedId); if (inst) this.renderProperties(inst); }
+  }
+
+  // ============================================================
+  // ELECTRICAL INSTALLATION
+  // ============================================================
+  _bindInstallation(){
+    this.installPanel = new InstallationPanel(document.getElementById('installBody'), {
+      electrical: this.electrical,
+      onChange: ()=>{ this.electrical.prune(); this.projectManager.pushHistory(); this.wireRenderer.markDirty(); this._nudgeSim(); this._refreshSelectedProps(); },
+      onSelect: (id)=>{ document.getElementById('installModal').classList.add('hidden'); this.transformManager.select(id); },
+      onAddElement: (defId)=>{ this._placeElectrical(defId); },
+      getEconomics: ()=>{ const sim = this.simulationEngine; return { energyYearZl: this.analyticsManager.projections(sim.todayKWh, sim.todaySolarKWh, sim.todayCost).yearCost }; },
+      getWireVisible: ()=>this.wireRenderer.visible,
+      onWireVisible: (v)=>this.wireRenderer.setVisible(v),
+    });
+    // live numbers while the window is open (skipped while the user is editing a field)
+    setInterval(()=>{ const m = document.getElementById('installModal'); if (m && !m.classList.contains('hidden')) this.installPanel.tick(); }, 1000);
+    I18n.onChange(()=>{ const m = document.getElementById('installModal'); if (m && !m.classList.contains('hidden')) this.installPanel.render(); });
+  }
+  openInstallation(){ this._closeAllModals(); this.installPanel.render(); document.getElementById('installModal').classList.remove('hidden'); }
+  /** Re-renders the properties panel of the selected object (its supply status just changed). */
+  _refreshSelectedProps(){
+    const id = this.transformManager.selectedId; if (!id) return;
+    const inst = this.objectManager.find(id); if (inst){ this._lastRenderedId = null; this.renderProperties(inst); }
+  }
+  /** A protection tripped / a cable burned: make the state visible everywhere without waiting for the next tick. */
+  onElectricalEvent(ev){
+    this._refreshSelectedProps();
+    const m = document.getElementById('installModal');
+    if (m && !m.classList.contains('hidden')) this.installPanel.render();
+  }
+
+  /** Adds a socket / strip / switchboard / meter to the active room (wall elements go on the back wall, then the gizmo moves them). */
+  _placeElectrical(defId){
+    const room = this.getActiveRoom();
+    if (!room || room.id==='__all__'){ this.toast(I18n.t('msg.pickRoomObject')); return null; }
+    const def = getElectricalDefinition(defId), el = this.electrical;
+    if ((defId==='switchboard' && el.board) || (defId==='meter' && el.meter)){ this.toast(I18n.t('elec.msg.alreadyExists')); return null; }
+    const W = room.settings.width, L = room.settings.length;
+    const pos = def.wallMount ? { x:W/2, y:def.defaultY, z:0.055 } : { x:W/2, y:0, z:L/2 };
+    const inst = this.objectManager.addElectrical(defId, pos, room.id, 0);
+    if (!inst) return null;
+    if (def.type==='socket'){
+      // joins the circuit of the nearest existing socket in this room and is wired right away, so it works immediately
+      const near = el.sockets(room.id).filter(x=>x!==inst && x.circuitId)
+        .sort((a,b)=>Math.hypot(a.position.x-pos.x,a.position.z-pos.z)-Math.hypot(b.position.x-pos.x,b.position.z-pos.z))[0];
+      inst.circuitId = near ? near.circuitId : ((el.data.circuits[0] && el.data.circuits[0].id) || null);
+      if (inst.circuitId && el.board) el.wire(inst.id);
+    }
+    this.wireRenderer.markDirty();
+    this.transformManager.select(inst.id); this.projectManager.pushHistory();
+    this.log(I18n.t('log.added', { name: I18n.deviceName(inst.def) }));
+    return inst;
+  }
+  _fitElectricalToRooms(){
+    for (const inst of this.objectManager.getElectrical()){
+      const room = this.getRoom(inst.roomId); if (!room) continue;
+      const W = room.settings.width, L = room.settings.length, H = room.settings.height;
+      const x = Math.max(0.055, Math.min(inst.position.x, W-0.055)), z = Math.max(0.055, Math.min(inst.position.z, L-0.055)), y = Math.min(inst.position.y, H-0.1);
+      if (x!==inst.position.x || z!==inst.position.z || y!==inst.position.y) this.objectManager.applyTransform(inst.id, { x, y, z }, inst.rotation, inst.scale);
+    }
+    this.wireRenderer.markDirty();
+  }
+
+  _electricalPropsHtml(inst){
+    const e = this.electrical, d = inst.def, live = inst.runtime.state==='live';
+    const pill = `<span class="ip-pill ${live?'ok':'bad'}">${live ? I18n.t('elec.status.live') : I18n.t('elec.status.'+(inst.runtime.status||'noSupply'))}</span>`;
+    let body = '';
+    if (d.type==='socket'){
+      const w = e.wireOf(inst.id), cab = e.cableFor(inst), c = inst.circuitId ? e.circuit(inst.circuitId) : null;
+      body = `
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.circuit')}</span><span class="val">
+          <select id="elCircuit"><option value="">—</option>${e.data.circuits.map(x=>`<option value="${x.id}" ${x.id===inst.circuitId?'selected':''}>${InstallationPanel.esc(x.name||x.id)}</option>`).join('')}</select></span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.wire')}</span><span class="val">${w ? `${cab.label} · ${I18n.num(e.wireLengthM(w),1)} m` : '—'}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.route')}</span><span class="val"><select id="elRoute" ${w?'':'disabled'}>${['ceiling','floor','direct'].map(k=>`<option value="${k}" ${w&&w.route===k?'selected':''}>${I18n.t('elec.route.'+k)}</option>`).join('')}</select></span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.voltage')}</span><span class="val">${I18n.num(inst.runtime.voltageV||0,0)} V</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.current')}</span><span class="val">${I18n.num(inst.runtime.currentA||0,2)} A / ${d.ratedA} A</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.outlets')}</span><span class="val">${e.usedOutlets(inst.id)} / ${d.outlets}</span></div>
+        <button class="small-btn" id="elWireToggle">${w ? I18n.t('elec.unwire') : I18n.t('elec.wireIt')}</button>`;
+    } else if (d.type==='strip'){
+      const socks = e.sockets().filter(x=>e.freeOutlets(x.id)>0 || x.id===inst.plugTo);
+      body = `
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.pluggedInto')}</span><span class="val"><select id="elStripSocket"><option value="">${I18n.t('elec.notPlugged')}</option>${socks.map(x=>`<option value="${x.id}" ${x.id===inst.plugTo?'selected':''}>${InstallationPanel.esc(this.installPanel.socketLabel(x))}</option>`).join('')}</select></span></div>
+        <div class="toggle-row"><span class="lbl">${I18n.t('elec.switch')}</span><label class="switch"><input type="checkbox" id="elStripOn" ${inst.enabled!==false?'checked':''}><span class="slider-tog"></span></label></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.current')}</span><span class="val">${I18n.num(inst.runtime.currentA||0,2)} A / ${d.ratedA} A</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.outlets')}</span><span class="val">${e.usedOutlets(inst.id)} / ${d.outlets}</span></div>
+        ${inst.runtime.status==='tripped' ? `<button class="small-btn" id="elStripReset">${I18n.t('elec.reset')}</button>` : ''}`;
+    } else if (d.type==='board'){
+      const m = e.data.mainBreaker;
+      body = `
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.mainBreaker')}</span><span class="val">${m.ratingA} A · ${m.state==='closed' ? I18n.t('elec.state.closed') : I18n.t('elec.state.tripped')}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.breakers')}</span><span class="val">${e.data.breakers.length}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('elec.circuits')}</span><span class="val">${e.data.circuits.length}</span></div>
+        <button class="small-btn" id="elOpenInstall">⚡ ${I18n.t('elec.openInstallation')}</button>`;
+    } else {
+      body = `<div class="prop-row"><span class="lbl">${I18n.t('elec.role')}</span><span class="val">${I18n.t('elec.meterRole')}</span></div>
+        <button class="small-btn" id="elOpenInstall">⚡ ${I18n.t('elec.openInstallation')}</button>`;
+    }
+    return `<div class="prop-section"><h4>${I18n.t('elec.section')}</h4>
+      <div class="prop-row"><span class="lbl">${I18n.t('ui.state')}</span><span class="val">${pill}</span></div>${body}</div>`;
+  }
+  _bindElectricalProps(inst){
+    const e = this.electrical, g = id=>document.getElementById(id);
+    const done = ()=>{ e.prune(); this.projectManager.pushHistory(); this.wireRenderer.markDirty(); this._nudgeSim(); this._lastRenderedId = null; this.renderProperties(inst); };
+    if (g('elCircuit')) g('elCircuit').addEventListener('change', ev=>{ e.assignSocketCircuit(inst.id, ev.target.value||null); done(); });
+    if (g('elRoute')) g('elRoute').addEventListener('change', ev=>{ e.setWireRoute(inst.id, ev.target.value); done(); });
+    if (g('elWireToggle')) g('elWireToggle').addEventListener('click', ()=>{ if (e.wireOf(inst.id)) e.unwire(inst.id); else e.wire(inst.id); done(); });
+    if (g('elStripSocket')) g('elStripSocket').addEventListener('change', ev=>{ if (ev.target.value) e.plugStrip(inst.id, ev.target.value); else inst.plugTo = null; done(); });
+    if (g('elStripOn')) g('elStripOn').addEventListener('change', ev=>{ inst.enabled = ev.target.checked; done(); });
+    if (g('elStripReset')) g('elStripReset').addEventListener('click', ()=>{ e.resetStrip(inst.id); done(); });
+    if (g('elOpenInstall')) g('elOpenInstall').addEventListener('click', ()=>this.openInstallation());
+  }
+
+  /** "Power supply" block of a device: what it is plugged into, why it might be dead, and the supply chain. */
+  _deviceSupplyHtml(inst){
+    const e = this.electrical, r = e.rt.devices[inst.id], status = inst.runtime.powerStatus || (r ? r.status : 'unassigned');
+    const ok = status==='ok' || status==='legacy';
+    const chain = e.trace(inst.id).map(n=>{
+      const name = I18n.t('elec.node.'+n.type);
+      let extra = '';
+      if (n.type==='device') extra = ` <b>${EnergyCalculator.fmtW(n.powerW||0)}</b>`;
+      else if (n.type==='breaker' || n.type==='main') extra = n.ratingA ? ` ${n.ratingA} A` : '';
+      return `<span class="flow-node ${n.ok?'':'flow-bad'}">${name}${extra}</span>`;
+    }).join('<span class="flow-arrow">→</span>');
+    return `<div class="prop-row"><span class="lbl">${I18n.t('elec.pluggedInto')}</span><span class="val">
+        <select id="propPlugTo">${InstallationPanel.plugOptions(this.installPanel, inst)}</select></span></div>
+      <div class="prop-row"><span class="lbl">${I18n.t('elec.supply')}</span><span class="val"><span class="ip-pill ${ok?'ok':'bad'}">${I18n.t('elec.status.'+status)}</span></span></div>
+      <div class="prop-row"><span class="lbl">${I18n.t('elec.voltage')}</span><span class="val">${I18n.num(inst.runtime.voltageV||0,0)} V</span></div>
+      <div class="flow-chain">${chain}</div>`;
+  }
+  _bindDeviceSupply(inst){
+    const sel = document.getElementById('propPlugTo'); if (!sel) return;
+    sel.addEventListener('change', ev=>{
+      if (ev.target.value) this.electrical.plugDevice(inst.id, ev.target.value); else this.electrical.unplugDevice(inst.id);
+      this.projectManager.pushHistory(); this._nudgeSim(); this._lastRenderedId = null; this.renderProperties(inst);
+    });
   }
 
   _stateColor(state){
@@ -893,6 +1155,7 @@ class UIManager {
     const sim = this.simulationEngine;
     const proj = this.analyticsManager.projections(sim.todayKWh, sim.todaySolarKWh, sim.todayCost);
     const s = this.getEnergySettings();
+    const inst = this.electrical.costBreakdown();     // one-off wiring cost + its yearly amortisation feed the project economics
     const cards = [
       { key:'power', l:'MOC TERAZ', v:EnergyCalculator.fmtW(sim.currentPowerW), cls:'power' },
       { key:'gen', l:I18n.t('footer.pvProduction'), v:'+'+EnergyCalculator.fmtW(sim.currentGenW), cls:'good' },
@@ -903,6 +1166,8 @@ class UIManager {
       { key:'year', l:I18n.t('common.year')+' ('+I18n.t('common.estimate')+')', v:Math.round(proj.year)+' kWh', cls:null },
       { key:'co2', l:'CO₂ / '+I18n.t('common.year')+' ('+I18n.t('stats.reduction')+')', v:Math.round(proj.co2AvoidedYear)+' kg', cls:'good' },
       { key:'lifetime', l:I18n.t('stats.lifetimeSavings'), v:EnergyCalculator.fmtCost(sim.totalSavedPLN,s.currency), cls:'good' },
+      { key:'installCost', l:I18n.t('elec.dash.installCost'), v:EnergyCalculator.fmtCost(inst.totalZl,s.currency), cls:null },
+      { key:'projectYear', l:I18n.t('elec.dash.projectYear'), v:EnergyCalculator.fmtCost(proj.yearCost+inst.amortizedPerYearZl,s.currency), cls:null },
     ];
     document.getElementById('dashCards').innerHTML = cards.map(c=>`<div class="dash-card ${c.cls?('dc-'+c.cls):''}" data-key="${c.key}"><div class="dc-label">${c.l}</div><div class="dc-value">${c.v}</div></div>`).join('');
     document.querySelectorAll('#dashCards .dash-card').forEach(el=>{
@@ -961,6 +1226,15 @@ class UIManager {
     } else if (key==='year' || key==='co2'){
       title = `${I18n.t('common.year')} ${y}`;
       body = yb.months.map(mo=>rows(`${mo.label}${mo.isProjected?' ('+I18n.t('common.estimate')+')':''}`, EnergyCalculator.fmtKWh(mo.consumedKWh))).join('');
+    } else if (key==='installCost' || key==='projectYear'){
+      const ic = this.electrical.costBreakdown();
+      title = I18n.t('elec.dash.economics');
+      body = rows(I18n.t('elec.dash.energyYear'), EnergyCalculator.fmtCost(proj.yearCost, s.currency))
+        + rows(I18n.t('elec.dash.installAmortized', { years: ELECTRICAL_CONSTANTS.designLifeYears }), EnergyCalculator.fmtCost(ic.amortizedPerYearZl, s.currency))
+        + rows(I18n.t('elec.dash.projectYear'), EnergyCalculator.fmtCost(proj.yearCost + ic.amortizedPerYearZl, s.currency))
+        + rows(I18n.t('elec.dash.installCost'), EnergyCalculator.fmtCost(ic.totalZl, s.currency))
+        + rows(I18n.t('elec.dash.cableLength'), I18n.num(ic.cableM, 1) + ' m')
+        + rows(I18n.t('elec.dash.lossesToday'), EnergyCalculator.fmtKWh(sim.todayLossKWh || 0));
     } else if (key==='lifetime'){
       title = I18n.t('stats.lifetimeSavings');
       body = rows(I18n.t('common.since'), EnergyCalculator.fmtCost(sim.totalSavedPLN, s.currency))
@@ -987,7 +1261,7 @@ class UIManager {
     this._chart('chartPowerOverTime', { type:'line', data:{
       labels: sim.powerHistory.map(p=>ScheduleManager.fromMinutes(p.absMin%1440)),
       datasets:[
-        { label:'Zużycie [W]', data: sim.powerHistory.map(p=>p.watts), borderColor:'#ffb648', backgroundColor:'rgba(255,182,72,0.12)', fill:true, tension:0.3, pointRadius:0 },
+        { label:I18n.t('chart.consumptionW'), data: sim.powerHistory.map(p=>p.watts), borderColor:'#ffb648', backgroundColor:'rgba(255,182,72,0.12)', fill:true, tension:0.3, pointRadius:0 },
         { label:'Produkcja PV [W]', data: sim.powerHistory.map(p=>p.genWatts||0), borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.10)', fill:true, tension:0.3, pointRadius:0 },
       ]
     }, options:{ responsive:true, maintainAspectRatio:false, plugins:{title:{display:true,text:'Power over time',color:'#e8edf4'}} }});
@@ -1007,31 +1281,31 @@ class UIManager {
 
     const wk = proj.weekProjection;
     this._chart('chartCostOverTime', { type:'line', data:{
-      labels:['Pn','Wt','Śr','Cz','Pt','So','Nd'],
+      labels:[1,2,3,4,5,6,0].map(d=>I18n.dayShort(d)),
       datasets:[{ label:'Koszt netto dzienny', data:[1,2,3,4,5,6,0].map(d=>wk.perWeekdayCost[d]), borderColor:'#4fd1c5', backgroundColor:'rgba(79,209,197,0.12)', fill:true, tension:0.3 }]
     }, options:{ responsive:true, maintainAspectRatio:false, plugins:{title:{display:true,text:'Cost over time (net of PV)',color:'#e8edf4'}} }});
 
     const todayShape = this.analyticsManager.computeHourlyShape(sim.simDay);
     const otherDay = (sim.simDay+1)%7;
     const otherShape = this.analyticsManager.computeHourlyShape(otherDay);
-    const dayNames=['Nd','Pn','Wt','Śr','Cz','Pt','So'];
+    const dayNames=[0,1,2,3,4,5,6].map(d=>I18n.dayShort(d));
     this._chart('chartDailyComparison', { type:'bar', data:{
       labels:[...Array(24).keys()],
       datasets:[
-        { label:dayNames[sim.simDay]+' (dziś)', data:todayShape.hours, backgroundColor:'#ffb648' },
+        { label:dayNames[sim.simDay]+' ('+I18n.t('chart.todaySuffix')+')', data:todayShape.hours, backgroundColor:'#ffb648' },
         { label:dayNames[otherDay], data:otherShape.hours, backgroundColor:'#4fd1c5' },
       ]
     }, options:{ responsive:true, maintainAspectRatio:false, plugins:{title:{display:true,text:'Daily comparison',color:'#e8edf4'}} }});
 
     this._chart('chartWeekly', { type:'bar', data:{
-      labels:['Nd','Pn','Wt','Śr','Cz','Pt','So'],
+      labels:[0,1,2,3,4,5,6].map(d=>I18n.dayShort(d)),
       datasets:[
-        { label:'Zużycie kWh', data:wk.perWeekdayTotal, backgroundColor:'#9b7bff' },
+        { label:I18n.t('chart.consumptionKWh'), data:wk.perWeekdayTotal, backgroundColor:'#9b7bff' },
         { label:'Produkcja PV kWh', data:wk.perWeekdayGen, backgroundColor:'#34d399' },
       ]
     }, options:{ responsive:true, maintainAspectRatio:false, plugins:{title:{display:true,text:'Weekly consumption vs production',color:'#e8edf4'}} }});
 
-    const months=['Sty','Lut','Mar','Kwi','Maj','Cze','Lip','Sie','Wrz','Paź','Lis','Gru'];
+    const months=[0,1,2,3,4,5,6,7,8,9,10,11].map(m=>I18n.t('monthshort.'+m));
     this._chart('chartMonthly', { type:'bar', data:{
       labels:months,
       datasets:[{ label:'kWh netto (projekcja wg harmonogramu)', data:months.map(()=>proj.month-proj.monthGen), backgroundColor:'#34d399' }]
@@ -1043,7 +1317,7 @@ class UIManager {
     const top5 = rows.slice(0,5);
     document.getElementById('top5Ranking').innerHTML = top5.map((r,i)=>`
       <div class="top5-item"><div class="top5-rank">#${i+1}</div><div class="top5-name">${r.name}</div>
-      <div class="top5-pct">${r.pct.toFixed(0)}% całkowitego zużycia</div></div>`).join('') || '<div style="color:var(--text-3)">Brak urządzeń w scenie.</div>';
+      <div class="top5-pct">${I18n.t('ui.pctOfTotalUse', { pct: r.pct.toFixed(0) })}</div></div>`).join('') || '<div style="color:var(--text-3)">' + I18n.t('ui.no_devices_in_the_scene') + '</div>';
     const s = this.getEnergySettings();
     const tbody = document.querySelector('#rankingTable tbody');
     tbody.innerHTML = rows.map(r=>`<tr class="rank-row" data-id="${r.inst.id}">
@@ -1071,19 +1345,19 @@ class UIManager {
         <div class="inner"><div class="score-num">${sc.score}</div><div class="score-grade">Klasa ${sc.grade}</div></div>
       </div>
       <div class="score-info">
-        <div class="si-row"><div class="si-label">NAJWIĘKSZY PROBLEM</div><div class="si-text">${sc.biggestProblem}</div></div>
-        <div class="si-row"><div class="si-label">NAJWIĘKSZA MOŻLIWOŚĆ OSZCZĘDNOŚCI</div><div class="si-text">${sc.biggestOpportunity}</div></div>
+        <div class="si-row"><div class="si-label">${I18n.t('ui.biggest_problem')}</div><div class="si-text">${sc.biggestProblem}</div></div>
+        <div class="si-row"><div class="si-label">${I18n.t('ui.biggest_saving_opportunity')}</div><div class="si-text">${sc.biggestOpportunity}</div></div>
       </div>
       <div class="household-compare">
-        <div class="si-label">NA TLE PRZECIĘTNEGO POLSKIEGO GOSPODARSTWA DOMOWEGO</div>
+        <div class="si-label">${I18n.t('ui.compared_to_the_average_polish_hou')}</div>
         <div class="hc-bars">
-          <div class="hc-bar-row"><span class="hc-bar-lbl">Twój dom</span><div class="hc-bar-track"><div class="hc-bar-fill ${hc.isBetter?'good':'bad'}" style="width:${Math.min(100,(hc.userYearKWh/Math.max(hc.userYearKWh,hc.refKWh))*100)}%"></div></div><span class="hc-bar-val">${Math.round(hc.userYearKWh)} kWh/rok</span></div>
-          <div class="hc-bar-row"><span class="hc-bar-lbl">Średnia PL</span><div class="hc-bar-track"><div class="hc-bar-fill ref" style="width:${Math.min(100,(hc.refKWh/Math.max(hc.userYearKWh,hc.refKWh))*100)}%"></div></div><span class="hc-bar-val">${Math.round(hc.refKWh)} kWh/rok</span></div>
+          <div class="hc-bar-row"><span class="hc-bar-lbl">${I18n.t('ui.your_home')}</span><div class="hc-bar-track"><div class="hc-bar-fill ${hc.isBetter?'good':'bad'}" style="width:${Math.min(100,(hc.userYearKWh/Math.max(hc.userYearKWh,hc.refKWh))*100)}%"></div></div><span class="hc-bar-val">${Math.round(hc.userYearKWh)} kWh/rok</span></div>
+          <div class="hc-bar-row"><span class="hc-bar-lbl">${I18n.t('ui.pl_average')}</span><div class="hc-bar-track"><div class="hc-bar-fill ref" style="width:${Math.min(100,(hc.refKWh/Math.max(hc.userYearKWh,hc.refKWh))*100)}%"></div></div><span class="hc-bar-val">${Math.round(hc.refKWh)} kWh/rok</span></div>
         </div>
         <div class="si-text" style="margin-top:8px">${hc.isBetter
-          ? `Zużywasz <b style="color:var(--accent-good)">${Math.abs(hc.pctDiff).toFixed(0)}% mniej</b> niż przeciętne gospodarstwo — to ok. <b style="color:var(--accent-good)">${EnergyCalculator.fmtCost(Math.abs(hc.costDiff),s.currency)}/rok</b> mniej.`
-          : `Zużywasz <b style="color:var(--accent-power)">${Math.abs(hc.pctDiff).toFixed(0)}% więcej</b> niż przeciętne gospodarstwo — to ok. <b style="color:var(--accent-power)">${EnergyCalculator.fmtCost(Math.abs(hc.costDiff),s.currency)}/rok</b> więcej.`}</div>
-        <div style="font-size:10.5px;color:var(--text-3);margin-top:6px">Wartość referencyjna (${Math.round(hc.refKWh)} kWh/rok) to edytowalne w Ustawieniach szacunkowe założenie, nie oficjalna statystyka URE/GUS.</div>
+          ? I18n.t('ui.hhLess', { pct: Math.abs(hc.pctDiff).toFixed(0), cost: EnergyCalculator.fmtCost(Math.abs(hc.costDiff),s.currency), col:'var(--accent-good)' })
+          : I18n.t('ui.hhMore', { pct: Math.abs(hc.pctDiff).toFixed(0), cost: EnergyCalculator.fmtCost(Math.abs(hc.costDiff),s.currency), col:'var(--accent-power)' })}</div>
+        <div style="font-size:10.5px;color:var(--text-3);margin-top:6px">${I18n.t('ui.hhRefNote', { kwh: Math.round(hc.refKWh) })}</div>
       </div>`;
   }
 
@@ -1092,29 +1366,29 @@ class UIManager {
     const sum = this.analyticsManager.solarSummary();
     const batt = this.analyticsManager.batterySummary(this.simulationEngine);
     const s = this.getEnergySettings();
-    if (!sum.count && !batt.count){ pane.innerHTML = '<div style="color:var(--text-3)">Brak paneli PV ani magazynu energii. Przełącz się na Garaż i dodaj je z kategorii "Energia".</div>'; return; }
+    if (!sum.count && !batt.count){ pane.innerHTML = '<div style="color:var(--text-3)">' + I18n.t('ui.noPvNoBattery') + '</div>'; return; }
     let html = '';
     if (sum.count){
       html += `
-      <h4 style="font-family:var(--font-display);font-size:12px;color:var(--text-3);text-transform:uppercase;margin-bottom:10px">Fotowoltaika</h4>
+      <h4 style="font-family:var(--font-display);font-size:12px;color:var(--text-3);text-transform:uppercase;margin-bottom:10px">${I18n.t('ui.photovoltaics')}</h4>
       <div class="wi-result" style="margin-bottom:18px">
-        <div class="wi-box"><div class="lbl">Liczba paneli</div><div class="wv">${sum.count}</div></div>
-        <div class="wi-box"><div class="lbl">Moc zainstalowana</div><div class="wv">${(sum.totalPeakW/1000).toFixed(2)} kWp</div></div>
-        <div class="wi-box"><div class="lbl">Produkcja dziś (proj.)</div><div class="wv" style="color:var(--accent-good)">${sum.todayGenKWh.toFixed(1)} kWh</div></div>
-        <div class="wi-box"><div class="lbl">Uznanie / rok (net-metering)</div><div class="wv" style="color:var(--accent-good)">${EnergyCalculator.fmtCost(sum.yearCredit,s.currency)}</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.number_of_panels')}</div><div class="wv">${sum.count}</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.installed_power')}</div><div class="wv">${(sum.totalPeakW/1000).toFixed(2)} kWp</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.production_today_proj')}</div><div class="wv" style="color:var(--accent-good)">${sum.todayGenKWh.toFixed(1)} kWh</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.credit_year_net_metering')}</div><div class="wv" style="color:var(--accent-good)">${EnergyCalculator.fmtCost(sum.yearCredit,s.currency)}</div></div>
       </div>`;
     }
     if (batt.count){
       html += `
-      <h4 style="font-family:var(--font-display);font-size:12px;color:var(--text-3);text-transform:uppercase;margin-bottom:10px">Magazyn energii</h4>
+      <h4 style="font-family:var(--font-display);font-size:12px;color:var(--text-3);text-transform:uppercase;margin-bottom:10px">${I18n.t('ui.energy_storage')}</h4>
       <div class="wi-result" style="margin-bottom:18px">
-        <div class="wi-box"><div class="lbl">Liczba magazynów</div><div class="wv">${batt.count}</div></div>
-        <div class="wi-box"><div class="lbl">Pojemność łączna</div><div class="wv">${batt.totalCapKWh.toFixed(1)} kWh</div></div>
-        <div class="wi-box"><div class="lbl">Naładowanie teraz</div><div class="wv">${batt.socPct.toFixed(0)}%</div></div>
-        <div class="wi-box"><div class="lbl">Naładowano / rozładowano dziś</div><div class="wv">${batt.todayChargeKWh.toFixed(1)} / ${batt.todayDischargeKWh.toFixed(1)} kWh</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.number_of_storages')}</div><div class="wv">${batt.count}</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.total_capacity')}</div><div class="wv">${batt.totalCapKWh.toFixed(1)} kWh</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.charge_now')}</div><div class="wv">${batt.socPct.toFixed(0)}%</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.charged_discharged_today')}</div><div class="wv">${batt.todayChargeKWh.toFixed(1)} / ${batt.todayDischargeKWh.toFixed(1)} kWh</div></div>
       </div>`;
     }
-    html += `<div style="font-size:12px;color:var(--text-3)">Model uproszczony: krzywa produkcji PV zależy od pory dnia i współczynnika zachmurzenia z ustawień. Magazyn energii ładuje się z nadwyżki PV i rozładowuje przy deficycie (maksymalizacja autokonsumpcji) - to nie jest prognoza pogody ani rzeczywisty sterownik BMS, tylko założenie symulacji.</div>`;
+    html += `<div style="font-size:12px;color:var(--text-3)">${I18n.t('ui.pvModelNote')}</div>`;
     pane.innerHTML = html;
   }
 
@@ -1124,13 +1398,13 @@ class UIManager {
     const snapshotBtn = (slot)=>`<button class="primary-btn" data-snap="${slot}">💾 Zapisz jako Scenariusz ${slot}</button>`;
     const card = (slot)=>{
       const sc = this.scenarios[slot];
-      if (!sc) return `<div class="scenario-card empty"><div class="sc-title">Scenariusz ${slot}</div><div style="color:var(--text-3);font-size:12px;margin:10px 0">Nie zapisano jeszcze - skonfiguruj dom, potem kliknij zapisz.</div>${snapshotBtn(slot)}</div>`;
+      if (!sc) return `<div class="scenario-card empty"><div class="sc-title">Scenariusz ${slot}</div><div style="color:var(--text-3);font-size:12px;margin:10px 0">${I18n.t('ui.nothing_saved_yet_set_up_the_house')}</div>${snapshotBtn(slot)}</div>`;
       return `<div class="scenario-card">
         <div class="sc-title">${sc.label}</div>
-        <div class="prop-row"><span class="lbl">Urządzenia / PV / magazyn</span><span class="val">${sc.deviceCount} / ${sc.solarCount} / ${sc.batteryCount}</span></div>
-        <div class="prop-row"><span class="lbl">Zużycie / mies.</span><span class="val">${sc.monthKWh.toFixed(1)} kWh</span></div>
-        <div class="prop-row"><span class="lbl">Koszt / mies.</span><span class="val">${EnergyCalculator.fmtCost(sc.monthCost,s.currency)}</span></div>
-        <div class="prop-row"><span class="lbl">Koszt / rok</span><span class="val">${EnergyCalculator.fmtCost(sc.yearCost,s.currency)}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.devices_pv_storage')}</span><span class="val">${sc.deviceCount} / ${sc.solarCount} / ${sc.batteryCount}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.consumption_mo')}</span><span class="val">${sc.monthKWh.toFixed(1)} kWh</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.cost_mo')}</span><span class="val">${EnergyCalculator.fmtCost(sc.monthCost,s.currency)}</span></div>
+        <div class="prop-row"><span class="lbl">${I18n.t('ui.cost_year')}</span><span class="val">${EnergyCalculator.fmtCost(sc.yearCost,s.currency)}</span></div>
         ${snapshotBtn(slot)}
       </div>`;
     };
@@ -1141,8 +1415,8 @@ class UIManager {
       const deltaYear = a.yearCost - b.yearCost;
       const cheaper = deltaMonth>0 ? 'B' : deltaMonth<0 ? 'A' : null;
       html += `<div class="scenario-result">
-        <div class="si-label">PORÓWNANIE</div>
-        <div class="si-text">${cheaper ? `Scenariusz <b>${cheaper}</b> jest tańszy o ${EnergyCalculator.fmtCost(Math.abs(deltaMonth),s.currency)}/mies. (${EnergyCalculator.fmtCost(Math.abs(deltaYear),s.currency)}/rok).` : 'Oba scenariusze mają identyczny koszt.'}</div>
+        <div class="si-label">${I18n.t('ui.comparison')}</div>
+        <div class="si-text">${cheaper ? I18n.t('ui.scenCheaper', { s: cheaper, month: EnergyCalculator.fmtCost(Math.abs(deltaMonth),s.currency), year: EnergyCalculator.fmtCost(Math.abs(deltaYear),s.currency) }) : I18n.t('ui.scenSame')}</div>
       </div>`;
     }
     pane.innerHTML = html;
@@ -1151,7 +1425,7 @@ class UIManager {
         const slot = btn.dataset.snap;
         const proj = this.analyticsManager.projections(this.simulationEngine.todayKWh, this.simulationEngine.todaySolarKWh, this.simulationEngine.todayCost);
         const defaultLabel = `Scenariusz ${slot} — ${new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'})}`;
-        const label = prompt('Nazwa scenariusza:', defaultLabel) || defaultLabel;
+        const label = prompt(I18n.t('msg.scenarioNamePrompt'), defaultLabel) || defaultLabel;
         this.scenarios[slot] = {
           label, monthKWh: proj.month, monthCost: proj.monthCost, yearCost: proj.yearCost,
           deviceCount: this.objectManager.getDevices().length,
@@ -1159,7 +1433,7 @@ class UIManager {
           batteryCount: this.objectManager.getBattery().length,
         };
         this._renderScenariosPane();
-        this.log(`Zapisano ${label}`);
+        this.log(I18n.t('log.scenarioSaved', { label }));
       });
     });
   }
@@ -1167,14 +1441,14 @@ class UIManager {
   _renderWhatIf(){
     const devices = this.objectManager.getDevices();
     const pane = document.getElementById('whatifPanel');
-    if (!devices.length){ pane.innerHTML='<div style="color:var(--text-3)">Dodaj urządzenia, aby przeprowadzić analizę.</div>'; return; }
+    if (!devices.length){ pane.innerHTML='<div style="color:var(--text-3)">' + I18n.t('ui.add_devices_to_run_the_analysis') + '</div>'; return; }
     pane.innerHTML = `
       <div class="wi-row">
         <select class="std-select" id="wiDevice">${devices.map(d=>`<option value="${d.id}">${d.customName||d.def.name}</option>`).join('')}</select>
-        <span style="color:var(--text-2);font-size:12px">Skala mocy/czasu pracy:</span>
+        <span style="color:var(--text-2);font-size:12px">${I18n.t('ui.power_run_time_scale')}</span>
         <input type="range" id="wiScale" min="0.2" max="1.5" step="0.05" value="1" style="width:160px">
         <span id="wiScaleLabel" style="font-family:var(--font-mono)">100%</span>
-        <button class="primary-btn" id="wiRun">Oblicz</button>
+        <button class="primary-btn" id="wiRun">${I18n.t('ui.calculate')}</button>
       </div>
       <div class="wi-result" id="wiResult"></div>`;
     document.getElementById('wiScale').addEventListener('input', (e)=>{
@@ -1186,10 +1460,10 @@ class UIManager {
       const res = this.analyticsManager.whatIf(id, { powerScale: scale });
       const s = this.getEnergySettings();
       document.getElementById('wiResult').innerHTML = `
-        <div class="wi-box"><div class="lbl">Before</div><div class="wv">${res.beforeMonthKWh.toFixed(1)} kWh</div></div>
-        <div class="wi-box"><div class="lbl">After</div><div class="wv">${res.afterMonthKWh.toFixed(1)} kWh</div></div>
-        <div class="wi-box"><div class="lbl">Saving / miesiąc</div><div class="wv" style="color:var(--accent-good)">${res.savingKWh.toFixed(1)} kWh · ${EnergyCalculator.fmtCost(res.savingCost,s.currency)}</div></div>
-        <div class="wi-box"><div class="lbl">Saving / rok</div><div class="wv" style="color:var(--accent-good)">${EnergyCalculator.fmtCost(res.savingYearCost,s.currency)}</div></div>`;
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.before')}</div><div class="wv">${res.beforeMonthKWh.toFixed(1)} kWh</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.after')}</div><div class="wv">${res.afterMonthKWh.toFixed(1)} kWh</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.savingMonth')}</div><div class="wv" style="color:var(--accent-good)">${res.savingKWh.toFixed(1)} kWh · ${EnergyCalculator.fmtCost(res.savingCost,s.currency)}</div></div>
+        <div class="wi-box"><div class="lbl">${I18n.t('ui.savingYear')}</div><div class="wv" style="color:var(--accent-good)">${EnergyCalculator.fmtCost(res.savingYearCost,s.currency)}</div></div>`;
       if (res.savingKWh>0) this._checkAchievements();
     });
   }
@@ -1213,7 +1487,7 @@ class UIManager {
   _renderCompareDevices(){
     const pane = document.getElementById('compareSubBody');
     const devices = this.objectManager.getDevices();
-    if (devices.length<2){ pane.innerHTML='<div style="color:var(--text-3)">Dodaj co najmniej dwa urządzenia, aby je porównać.</div>'; return; }
+    if (devices.length<2){ pane.innerHTML='<div style="color:var(--text-3)">' + I18n.t('ui.add_at_least_two_devices_to_compar') + '</div>'; return; }
     const a = this.compareSelection[0] || devices[0].id;
     const b = this.compareSelection[1] || devices[1].id;
     pane.innerHTML = `
@@ -1239,7 +1513,7 @@ class UIManager {
       ];
       if (this.petManager.hasFeature('compare_overlay')){
         const hh = this.analyticsManager.householdComparison();
-        rowsHtml.push(['% śr. gosp. domowego', (c.a.monthlyKWh*12/hh.refKWh*100).toFixed(0)+'%', (c.b.monthlyKWh*12/hh.refKWh*100).toFixed(0)+'%']);
+        rowsHtml.push([I18n.t('ui.pctOfAvgHousehold'), (c.a.monthlyKWh*12/hh.refKWh*100).toFixed(0)+'%', (c.b.monthlyKWh*12/hh.refKWh*100).toFixed(0)+'%']);
       }
       document.getElementById('cmpTable').innerHTML = `<thead><tr><th></th><th>${c.a.name}</th><th>${c.b.name}</th></tr></thead>
         <tbody>${rowsHtml.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')}</tbody>`;
@@ -1261,10 +1535,10 @@ class UIManager {
     let body;
     if (cmp.insufficientData){
       body = `<div class="pet-empty-note">${I18n.lang==='pl'
-        ? `Za mało zagranej historii, aby porównać pełne okresy (potrzeba co najmniej ${cmp.needDays||30} dni symulacji). Przyspiesz czas lub wróć później.`
+        ? I18n.t('ui.notEnoughHistory', { days: I18n.plural('unit.simDay', cmp.needDays||30) })
         : `Not enough played history yet to compare full periods (need at least ${cmp.needDays||30} simulated days). Speed up time or come back later.`}</div>`;
     } else if (!cmp.hasPrevious){
-      body = `<div class="pet-empty-note">${I18n.lang==='pl' ? 'To pierwszy pełny okres — brak jeszcze poprzedniego do porównania.' : 'This is the first full period — no previous one to compare yet.'}</div>`;
+      body = `<div class="pet-empty-note">${I18n.t('ui.firstPeriod')}</div>`;
     } else {
       const fmtPct = (p)=> p==null ? '—' : (p>=0?'+':'')+p.toFixed(1)+'%';
       const rows = [
@@ -1294,22 +1568,28 @@ class UIManager {
   /** Adds a new room of `type` to the right of the existing layout and makes it active.
    *  Only 'garage' gets special geometry (door+roof) in RoomBuilder - every other type,
    *  including these, is a standard rectangular room told apart by icon/defaults/onlyIn. */
-  _addRoom(type){
+  _addRoom(type, levelId){
     const house = this.getHouseState();
     const meta = getRoomTypeMeta(type);
     const countSameType = house.rooms.filter(r=>r.type===type).length;
-    const name = countSameType>0 ? `${meta.label} ${countSameType+1}` : meta.label;
+    const name = countSameType>0 ? `${I18n.roomType(type)} ${countSameType+1}` : I18n.roomType(type);
     const id = 'room_' + Date.now().toString(36) + Math.floor(Math.random()*1000).toString(36);
-    let x = 0;
-    for (const r of house.rooms) x += r.settings.width + 1.4;
-    house.rooms.push({ id, name, type, settings:{...meta.defaults}, offsetX:x });
-    house.activeRoomId = id;
+    const room = { id, name, type, settings:{...meta.defaults}, offsetX:0, offsetZ:0, levelId: levelId || house.activeLevelId || house.levels[0].id };
+    BuildingModel.ensureRoom(room);
+    BuildingModel.placeNewRoom(house, room);          // next to the others, or stacked on a free spot of another storey
+    house.rooms.push(room);
+    house.activeRoomId = id; house.activeLevelId = room.levelId;
     this.setHouseState(house);
     this.rebuildHouse();
+    // a new room gets real sockets on a socket circuit, wired to the switchboard, like every other room
+    this.electrical.ensureRoom({ id, name, type, offsetX:room.offsetX, offsetZ:room.offsetZ, elevation:BuildingModel.elevation(house, room), width:room.settings.width, length:room.settings.length, height:room.settings.height });
+    this.electrical.autoWire(); this.wireRenderer.markDirty();
     this.projectManager.pushHistory();
     this.renderRoomTabs();
-    this.toast(`${meta.icon} Dodano pokój: ${name}`);
-    this.log(`Dodano pokój: ${name} (${meta.label})`);
+    this.toast(`${meta.icon} ${I18n.t('log.roomAdded', { name })}`);
+    this.log(I18n.t('log.roomAddedType', { name, type: I18n.roomType(type) }));
+    if (this.designer) this.designer.render();
+    return room;
   }
 
   /** Removes a room and everything placed inside it (ObjectManager.removeRoomGroup),
@@ -1317,23 +1597,25 @@ class UIManager {
    *  committing change this goes through pushHistory, so Ctrl+Z can bring it back. */
   _removeRoom(roomId){
     const house = this.getHouseState();
-    if (house.rooms.length<=1){ this.toast('Dom musi mieć przynajmniej jeden pokój.'); return; }
+    if (house.rooms.length<=1){ this.toast(I18n.t('msg.needOneRoom')); return; }
     const room = house.rooms.find(r=>r.id===roomId);
     if (!room) return;
     const objCount = this.objectManager.getAll(roomId).length;
-    const warn = objCount>0 ? ` wraz z ${objCount} obiektem(-ami) w nim umieszczonym(i)` : '';
-    if (!confirm(`Usunąć pokój "${room.name}"${warn}?`)) return;
+    const warn = objCount>0 ? ' ' + I18n.t('msg.withObjects', { objects: I18n.plural('unit.object', objCount) }) : '';
+    if (!confirm(I18n.t('msg.confirmDeleteRoom', { name: room.name, warn }))) return;
     house.rooms = house.rooms.filter(r=>r.id!==roomId);
-    let x = 0;
-    for (const r of house.rooms){ r.offsetX = x; x += r.settings.width + 1.4; }
-    if (house.activeRoomId === roomId) house.activeRoomId = house.rooms[0].id;
+    BuildingModel.autoLayout(house);                    // re-pack (only while the layout is still the automatic one)
+    house.stairs = house.stairs.filter(s=>s.roomId!==roomId);
+    if (house.activeRoomId === roomId){ house.activeRoomId = house.rooms[0].id; house.activeLevelId = house.rooms[0].levelId; }
+    this.electrical.dropRoomCircuits(roomId);           // circuits that only served this room disappear with it
     this.objectManager.removeRoomGroup(roomId);
+    this.electrical.prune(); this.wireRenderer.markDirty();
     this.setHouseState(house);
     this.rebuildHouse();
     this.projectManager.pushHistory();
     this.renderRoomTabs();
-    this.log(`Usunięto pokój: ${room.name}`);
-    this.toast(`Usunięto pokój: ${room.name}`);
+    this.log(I18n.t('log.roomRemoved', { name: room.name }));
+    this.toast(I18n.t('log.roomRemoved', { name: room.name }));
   }
 
   openRoomSettings(){
@@ -1346,19 +1628,19 @@ class UIManager {
       body.innerHTML = `
         <div class="rooms-list" id="rsRoomPicker">${house2.rooms.map(r=>`<div class="room-chip ${r.id===room.id?'active':''}" data-room="${r.id}">${getRoomTypeMeta(r.type).icon} ${r.name}</div>`).join('')}</div>
         <div class="room-add-row" style="display:flex;gap:8px;margin:0 0 16px">
-          <select id="rsNewRoomType" style="flex:1;background:var(--bg-raised);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--text-1)">${Object.entries(ROOM_TYPE_META).map(([key,meta])=>`<option value="${key}">${meta.icon} ${meta.label}</option>`).join('')}</select>
-          <button class="small-btn" id="rsAddRoom" style="width:auto;white-space:nowrap;margin-top:0;padding:8px 14px">+ Dodaj pokój</button>
+          <select id="rsNewRoomType" style="flex:1;background:var(--bg-raised);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--text-1)">${Object.entries(ROOM_TYPE_META).map(([key,meta])=>`<option value="${key}">${meta.icon} ${I18n.roomType(key)}</option>`).join('')}</select>
+          <button class="small-btn" id="rsAddRoom" style="width:auto;white-space:nowrap;margin-top:0;padding:8px 14px">${I18n.t('ui.add_room')}</button>
         </div>
-        <div class="field-row"><label>Nazwa pokoju</label><input type="text" id="rsName" value="${room.name}"></div>
-        <div class="field-row"><label>Width (m)</label><input type="number" id="rsWidth" step="0.1" value="${rs.width}"></div>
-        <div class="field-row"><label>Length (m)</label><input type="number" id="rsLength" step="0.1" value="${rs.length}"></div>
-        <div class="field-row"><label>Height (m)</label><input type="number" id="rsHeight" step="0.1" value="${rs.height}"></div>
-        <div class="field-row"><label>Floor</label><select id="rsFloor">${['Wood','Tile','Concrete','Carpet'].map(o=>`<option ${o===rs.floor?'selected':''}>${o}</option>`).join('')}</select></div>
-        <div class="field-row"><label>Wall</label><select id="rsWall">${['White','Gray','Brick','Concrete'].map(o=>`<option ${o===rs.wall?'selected':''}>${o}</option>`).join('')}</select></div>
-        <div class="field-row"><label>Widoczność ścian (podgląd)</label><input type="range" id="rsWallVis" min="0" max="100" value="${Math.round((house2.wallVisibility??1)*100)}"></div>
+        <div class="field-row"><label>${I18n.t('ui.room_name')}</label><input type="text" id="rsName" value="${room.name}"></div>
+        <div class="field-row"><label>${I18n.t('ui.width')}</label><input type="number" id="rsWidth" step="0.1" value="${rs.width}"></div>
+        <div class="field-row"><label>${I18n.t('ui.length')}</label><input type="number" id="rsLength" step="0.1" value="${rs.length}"></div>
+        <div class="field-row"><label>${I18n.t('ui.height')}</label><input type="number" id="rsHeight" step="0.1" value="${rs.height}"></div>
+        <div class="field-row"><label>${I18n.t('ui.floor')}</label><select id="rsFloor">${['Wood','Tile','Concrete','Carpet'].map(o=>`<option ${o===rs.floor?'selected':''}>${o}</option>`).join('')}</select></div>
+        <div class="field-row"><label>${I18n.t('ui.wall')}</label><select id="rsWall">${['White','Gray','Brick','Concrete'].map(o=>`<option ${o===rs.wall?'selected':''}>${o}</option>`).join('')}</select></div>
+        <div class="field-row"><label>${I18n.t('ui.wall_visibility_preview')}</label><input type="range" id="rsWallVis" min="0" max="100" value="${Math.round((house2.wallVisibility??1)*100)}"></div>
         <button class="primary-btn" id="rsApply" style="margin-top:14px;width:100%">Zastosuj zmiany dla: ${room.name}</button>
-        <button class="small-btn danger" id="rsRemoveRoom" style="margin-top:8px" ${house2.rooms.length<=1?'disabled':''}>🗑 Usuń pokój: ${room.name}</button>
-        <div style="font-size:11px;color:var(--text-3);margin-top:10px">Wskazówka: suwak widoczności ścian jest też dostępny bezpośrednio w pasku narzędzi nad widokiem 3D — jeden suwak dla całego domu.</div>`;
+        <button class="small-btn danger" id="rsRemoveRoom" style="margin-top:8px" ${house2.rooms.length<=1?'disabled':''}>🗑 ${I18n.t('ui.removeRoom', { name: room.name })}</button>
+        <div style="font-size:11px;color:var(--text-3);margin-top:10px">${I18n.t('ui.wallSliderHint')}</div>`;
       body.querySelectorAll('#rsRoomPicker .room-chip').forEach(chip=>{
         chip.addEventListener('click', ()=>renderFor(chip.dataset.room));
       });
@@ -1375,7 +1657,7 @@ class UIManager {
         const t = Number(e.target.value)/100;
         this.roomBuilder.setWallVisibility(t);
         document.getElementById('wallVisRange').value = e.target.value;
-        document.getElementById('wallVisLabel').textContent = e.target.value<5?'Otwarty':(e.target.value>95?'Zamknięty':e.target.value+'%');
+        document.getElementById('wallVisLabel').textContent = e.target.value<5?I18n.t('nav.wallsOpen'):(e.target.value>95?I18n.t('nav.wallsClosed'):e.target.value+'%');
       });
       document.getElementById('rsApply').addEventListener('click', ()=>{
         room.name = document.getElementById('rsName').value || room.name;
@@ -1391,20 +1673,15 @@ class UIManager {
         };
         house2.wallVisibility = Number(document.getElementById('rsWallVis').value)/100;
         // keep rooms laid out left-to-right with a fixed gap, so resizing one shifts the next
-        if (deltaW !== 0){
-          const idx = house2.rooms.findIndex(r=>r.id===room.id);
-          let x = 0;
-          for (let i=0;i<house2.rooms.length;i++){
-            house2.rooms[i].offsetX = x;
-            x += house2.rooms[i].settings.width + 1.4;
-          }
-        }
+        BuildingModel.refit(house2, house2.rooms.find(r=>r.id===room.id));   // openings / partitions / stairs stay inside the new walls
+        if (deltaW !== 0) BuildingModel.autoLayout(house2);
         this.setHouseState(house2);
         this.rebuildHouse();
+        this._fitElectricalToRooms();
         this.projectManager.pushHistory();
         document.getElementById('roomSettingsModal').classList.add('hidden');
         this.renderRoomTabs();
-        this.log(`Zaktualizowano ustawienia pokoju: ${room.name}`);
+        this.log(I18n.t('log.roomUpdated', { name: room.name }));
       });
     };
     renderFor(house.activeRoomId==='__all__' ? house.rooms[0].id : house.activeRoomId);
@@ -1426,34 +1703,34 @@ class UIManager {
     const ctx = this.automationManager.context;
     body.innerHTML = `
       <div class="presence-row">
-        <label class="chk"><input type="checkbox" id="shPresence" ${ctx.presence?'checked':''}> Obecność w pokoju (symulowany czujnik ruchu)</label>
-        <label class="chk">Temperatura: <input type="range" id="shTemp" min="15" max="32" value="${ctx.tempC}" style="width:120px"> <span id="shTempLabel">${ctx.tempC}°C</span></label>
+        <label class="chk"><input type="checkbox" id="shPresence" ${ctx.presence?'checked':''}> ${I18n.t('ui.presenceLabel')}</label>
+        <label class="chk">${I18n.t('ui.temperatureLabel')} <input type="range" id="shTemp" min="15" max="32" value="${ctx.tempC}" style="width:120px"> <span id="shTempLabel">${ctx.tempC}°C</span></label>
       </div>
       <div class="rule-builder">
-        <div><label>JEŚLI</label><select class="std-select" id="ruleIf">
-          <option value="time">o godzinie</option>
-          <option value="noPresence">nikogo nie ma</option>
-          <option value="presence">ktoś jest obecny</option>
-          <option value="tempAbove">temperatura powyżej</option>
+        <div><label>${I18n.t('ui.if')}</label><select class="std-select" id="ruleIf">
+          <option value="time">${I18n.t('ui.at')}</option>
+          <option value="noPresence">${I18n.t('ui.nobody_is_there')}</option>
+          <option value="presence">${I18n.t('ui.someone_is_present')}</option>
+          <option value="tempAbove">${I18n.t('ui.temperature_above')}</option>
         </select></div>
-        <div id="ruleIfValueWrap"><label>WARTOŚĆ</label><input class="std-input" id="ruleIfValue" type="time" value="23:00"></div>
+        <div id="ruleIfValueWrap"><label>${I18n.t('ui.value')}</label><input class="std-input" id="ruleIfValue" type="time" value="23:00"></div>
         <div><label>TO</label><select class="std-select" id="ruleTarget">${devices.map(d=>`<option value="${d.id}">${d.customName||d.def.name}</option>`).join('')}</select></div>
-        <div><label>USTAW STAN</label><select class="std-select" id="ruleThen"></select></div>
-        <button class="primary-btn" id="ruleAdd">Dodaj regułę</button>
+        <div><label>${I18n.t('ui.set_state')}</label><select class="std-select" id="ruleThen"></select></div>
+        <button class="primary-btn" id="ruleAdd">${I18n.t('ui.add_rule')}</button>
       </div>
       <div class="wi-row" style="margin-bottom:10px">
-        <button class="small-btn" id="presetMotion">+ Brak obecności → wyłącz światło</button>
-        <button class="small-btn" id="presetNight">+ 23:00 → standby wszystkich RTV</button>
-        <button class="small-btn" id="presetTemp">+ Temperatura &gt;26°C → włącz klimatyzację</button>
+        <button class="small-btn" id="presetMotion">${I18n.t('ui.no_presence_turn_the_light_off')}</button>
+        <button class="small-btn" id="presetNight">${I18n.t('ui.23_00_all_tv_av_to_standby')}</button>
+        <button class="small-btn" id="presetTemp">${I18n.t('ui.temperature_gt_26_c_turn_the_a_c_o')}</button>
       </div>
       <div id="ruleList"></div>`;
 
     const ifSelect = document.getElementById('ruleIf');
     const valueWrap = document.getElementById('ruleIfValueWrap');
     const updateValueField = ()=>{
-      if (ifSelect.value==='time') valueWrap.innerHTML = '<label>WARTOŚĆ</label><input class="std-input" id="ruleIfValue" type="time" value="23:00">';
-      else if (ifSelect.value==='tempAbove') valueWrap.innerHTML = '<label>WARTOŚĆ (°C)</label><input class="std-input" id="ruleIfValue" type="number" value="26">';
-      else valueWrap.innerHTML = '<label>WARTOŚĆ</label><input class="std-input" id="ruleIfValue" disabled value="—">';
+      if (ifSelect.value==='time') valueWrap.innerHTML = '<label>' + I18n.t('ui.value') + '</label><input class="std-input" id="ruleIfValue" type="time" value="23:00">';
+      else if (ifSelect.value==='tempAbove') valueWrap.innerHTML = '<label>' + I18n.t('ui.value_c') + '</label><input class="std-input" id="ruleIfValue" type="number" value="26">';
+      else valueWrap.innerHTML = '<label>' + I18n.t('ui.value') + '</label><input class="std-input" id="ruleIfValue" disabled value="—">';
     };
     ifSelect.addEventListener('change', updateValueField);
 
@@ -1480,18 +1757,18 @@ class UIManager {
     });
     document.getElementById('presetMotion').addEventListener('click', ()=>{
       const light = devices.find(d=>d.def.category==='lighting');
-      if (light){ this.automationManager.addRule({ name:'Jeśli nikogo nie ma w pokoju → wyłącz światło', ifType:'noPresence', targetInstId:light.id, thenState:'off' }); this._renderRuleList(); }
-      else alert('Dodaj najpierw urządzenie oświetleniowe.');
+      if (light){ this.automationManager.addRule({ name:I18n.t('rule.noPresenceLightOff'), ifType:'noPresence', targetInstId:light.id, thenState:'off' }); this._renderRuleList(); }
+      else alert(I18n.t('msg.addLightFirst'));
     });
     document.getElementById('presetNight').addEventListener('click', ()=>{
       const tv = devices.find(d=>d.def.category==='rtv');
-      if (tv){ this.automationManager.addRule({ name:'23:00 → przełącz w standby', ifType:'time', ifValue:'23:00', targetInstId:tv.id, thenState:'standby' }); this._renderRuleList(); }
-      else alert('Dodaj najpierw urządzenie RTV.');
+      if (tv){ this.automationManager.addRule({ name:I18n.t('rule.tvStandby'), ifType:'time', ifValue:'23:00', targetInstId:tv.id, thenState:'standby' }); this._renderRuleList(); }
+      else alert(I18n.t('msg.addTvFirst'));
     });
     document.getElementById('presetTemp').addEventListener('click', ()=>{
       const ac = devices.find(d=>d.def.category==='climate');
-      if (ac){ this.automationManager.addRule({ name:'Temperatura > 26°C → włącz klimatyzację', ifType:'tempAbove', ifValue:26, targetInstId:ac.id, thenState:Object.keys(ac.def.states)[0] }); this._renderRuleList(); }
-      else alert('Dodaj najpierw klimatyzator.');
+      if (ac){ this.automationManager.addRule({ name:I18n.t('rule.hotAc'), ifType:'tempAbove', ifValue:26, targetInstId:ac.id, thenState:Object.keys(ac.def.states)[0] }); this._renderRuleList(); }
+      else alert(I18n.t('msg.addAcFirst'));
     });
 
     this._renderRuleList();
@@ -1503,8 +1780,8 @@ class UIManager {
       const target = this.objectManager.find(r.targetInstId);
       return `<div class="rule-card"><div class="rc-title">${r.name}</div>
         <div class="rc-desc">Cel: ${target?(target.customName||target.def.name):'—'} · Akcja: ${r.thenState}</div>
-        <button class="small-btn" data-rule="${r.id}" style="margin-top:8px;width:auto">Usuń regułę</button></div>`;
-    }).join('') : '<div style="color:var(--text-3);font-size:12.5px">Brak automatyzacji. Dodaj pierwszą regułę powyżej, aby odblokować osiągnięcie "Smart Home".</div>';
+        <button class="small-btn" data-rule="${r.id}" style="margin-top:8px;width:auto">${I18n.t('ui.delete_rule')}</button></div>`;
+    }).join('') : '<div style="color:var(--text-3);font-size:12.5px">' + I18n.t('ui.no_automations_yet_add_your_first_') + '</div>';
     list.querySelectorAll('[data-rule]').forEach(b=>{
       b.addEventListener('click', ()=>{ this.automationManager.removeRule(b.dataset.rule); this._renderRuleList(); });
     });
@@ -1533,6 +1810,18 @@ class UIManager {
     }
     return lines.length ? lines.map(l=>`<div class="tariff-sched-line">${l}</div>`).join('') : `<div style="font-size:11.5px;color:var(--text-3)">${I18n.t('tariff.rate.day')} ${I18n.t('common.all')}</div>`;
   }
+  _numOrNull(v){ return (v===''||v==null||!isFinite(Number(v))) ? null : Math.max(0, Number(v)); }
+  /** Applies a new PV order immediately (no Save needed): settings, undo history and a fresh instant resolve so the
+   *  footer / flow / panels reflect the new priority within the same frame. */
+  _applyPvOrder(order){
+    const es = this.getEnergySettings();
+    es.pvOrder = order.slice();
+    es.pvPriority = order[0]==='battery' ? 'battery_first' : 'home_first'; // legacy mirror for anything still reading it
+    this.setEnergySettings(es);
+    this.projectManager.pushHistory();
+    this.simulationEngine._recomputeInstant(false);
+    this.log(I18n.t('log.pvOrderChanged', { order: order.map(k=>I18n.t(PriorityList.META[k].labelKey)).join(' → ') }));
+  }
   openSettings(){
     const s = this.getEnergySettings();
     const body = document.getElementById('settingsBody');
@@ -1558,31 +1847,32 @@ class UIManager {
 
       <hr style="border-color:var(--border);margin:16px 0">
       <h4 class="settings-section-h">${I18n.t('settings.pvSection')}</h4>
-      <div class="field-row"><label>${I18n.t('priority.title')}</label>
-        <select id="setPvPriority">
-          <option value="home_first" ${cur.pvPriority==='home_first'?'selected':''}>${I18n.t('priority.home_first')}</option>
-          <option value="battery_first" ${cur.pvPriority==='battery_first'?'selected':''}>${I18n.t('priority.battery_first')}</option>
-        </select>
+      <div class="field-row" style="display:block"><label style="display:block;margin-bottom:2px">${I18n.t('priority.title')}</label>
+        <div style="font-size:11px;color:var(--text-3)">${I18n.t('pvsink.intro')}</div>
+        <div id="pvPriorityList"></div>
       </div>
-      <div style="font-size:11px;color:var(--text-3);margin-bottom:10px" id="pvPriorityDesc">${cur.pvPriority==='battery_first'?I18n.t('priority.battery_firstDesc'):I18n.t('priority.home_firstDesc')}</div>
+      <div class="field-row"><label>${I18n.t('pv.exportLimit')}</label><input type="number" min="0" step="100" id="setExportLimit" placeholder="${I18n.t('pv.noLimit')}" value="${cur.exportLimitW==null?'':cur.exportLimitW}"></div>
+      <div class="field-row"><label>${I18n.t('pv.importLimit')}</label><input type="number" min="0" step="100" id="setImportLimit" placeholder="${I18n.t('pv.noLimit')}" value="${cur.importLimitW==null?'':cur.importLimitW}"></div>
+      <div class="field-row"><label>${I18n.t('battery.reserve')}</label><input type="number" min="0" max="90" step="1" id="setBatteryReserve" value="${cur.batteryReservePct||0}"></div>
+      <div style="font-size:11px;color:var(--text-3);margin-bottom:10px">${I18n.t('pv.limitsNote')}</div>
 
       <hr style="border-color:var(--border);margin:16px 0">
       <h4 class="settings-section-h">${I18n.t('settings.generalSection')}</h4>
       <div class="field-row"><label>${I18n.t('common.currency')}</label><input type="text" id="setCurrency" value="${cur.currency}" maxlength="4"></div>
-      <div class="field-row"><label>Opłaty dodatkowe / mies.</label><input type="number" step="0.5" id="setFees" value="${cur.extraFeesPerMonth}"></div>
+      <div class="field-row"><label>${I18n.t('ui.additional_fees_month')}</label><input type="number" step="0.5" id="setFees" value="${cur.extraFeesPerMonth}"></div>
       <div class="field-row"><label>${I18n.t('settings.co2Factor')}</label><input type="number" step="0.01" id="setCo2" value="${cur.co2Factor}"></div>
       <div class="field-row"><label>${I18n.t('settings.avgHousehold')}</label><input type="number" step="50" id="setAvgHousehold" value="${cur.avgHouseholdKWhYear}"></div>
-      <div style="font-size:11px;color:var(--text-3);margin:8px 0 14px">Ceny energii, taryfy i współczynnik CO₂ to założenia symulacji, a nie aktualna taryfa operatora — wartości zależą od dostawcy i miksu energetycznego.</div>
+      <div style="font-size:11px;color:var(--text-3);margin:8px 0 14px">${I18n.t('ui.settingsAssumptions')}</div>
       <button class="primary-btn" id="setApply" style="width:100%">${I18n.t('common.save')}</button>
 
       <hr style="border-color:var(--border);margin:18px 0">
-      <h4 class="settings-section-h">Projekt</h4>
+      <h4 class="settings-section-h">${I18n.t('ui.project')}</h4>
       <div class="wi-row">
         <button class="small-btn" id="projNew">🆕 ${I18n.t('nav.newSim')}</button>
-        <button class="small-btn" id="projSave">💾 Save</button>
-        <button class="small-btn" id="projLoad">📂 Load</button>
-        <button class="small-btn" id="projExport">⬇ Export JSON</button>
-        <button class="small-btn" id="projImport">⬆ Import JSON</button>
+        <button class="small-btn" id="projSave">${I18n.t('ui.saveBtn')}</button>
+        <button class="small-btn" id="projLoad">${I18n.t('ui.loadBtn')}</button>
+        <button class="small-btn" id="projExport">${I18n.t('ui.exportBtn')}</button>
+        <button class="small-btn" id="projImport">${I18n.t('ui.importBtn')}</button>
         <input type="file" id="projImportFile" accept="application/json" class="hidden">
       </div>
 
@@ -1598,8 +1888,10 @@ class UIManager {
         document.getElementById('tariffDetailBox').innerHTML = this._tariffScheduleSummaryHtml(this.getEnergySettings(), e.target.value);
         document.getElementById('setEditTariffSched').disabled = TariffManager.get(e.target.value).rates.length<=1;
       });
-      document.getElementById('setPvPriority').addEventListener('change', (e)=>{
-        document.getElementById('pvPriorityDesc').textContent = e.target.value==='battery_first' ? I18n.t('priority.battery_firstDesc') : I18n.t('priority.home_firstDesc');
+      // visual 3-slot PV priority - applied to the running simulation the moment it changes
+      this.pvPriorityList = new PriorityList(document.getElementById('pvPriorityList'), {
+        order: SimulationEngine.normalizePvOrder(cur.pvOrder, cur.pvPriority),
+        onChange: (order)=>this._applyPvOrder(order),
       });
       document.getElementById('setEditTariffSched').addEventListener('click', ()=>{
         const code = document.getElementById('setTariffCode').value;
@@ -1631,14 +1923,16 @@ class UIManager {
           tariffCode: code,
           tariffPrices: newPrices,
           exportPricePerKWh: Number(document.getElementById('setExportPrice').value)||0,
-          pvPriority: document.getElementById('setPvPriority').value,
+          exportLimitW: this._numOrNull(document.getElementById('setExportLimit').value),
+          importLimitW: this._numOrNull(document.getElementById('setImportLimit').value),
+          batteryReservePct: Math.max(0, Math.min(90, Number(document.getElementById('setBatteryReserve').value)||0)),
           currency: document.getElementById('setCurrency').value||'PLN',
           extraFeesPerMonth: Number(document.getElementById('setFees').value)||0,
           co2Factor: Number(document.getElementById('setCo2').value)||0.65,
           avgHouseholdKWhYear: Number(document.getElementById('setAvgHousehold').value)||2900,
         });
         this.projectManager.pushHistory();
-        this.log('Zaktualizowano ustawienia energii i taryfy.');
+        this.log(I18n.t('log.energySettingsUpdated'));
         document.getElementById('settingsModal').classList.add('hidden');
       });
       document.getElementById('projNew').addEventListener('click', ()=>{ document.getElementById('settingsModal').classList.add('hidden'); this._openNewSimModal(); });
@@ -1668,23 +1962,23 @@ class UIManager {
   // ============================================================
   _bindEduModal(){}
   openEdu(inst){
-    document.getElementById('eduTitle').textContent = `${inst.customName||inst.def.name} — jak działa zużycie energii?`;
+    document.getElementById('eduTitle').textContent = `${inst.customName||I18n.deviceName(inst.def)} — ${I18n.t('ui.eduHow')}`;
     const def = inst.def;
     const dailyKWh = this.simulationEngine.todayKWhByDevice[inst.id]||0;
     const s = this.getEnergySettings();
     document.getElementById('eduBody').innerHTML = `
-      <div class="edu-term"><b>Moc znamionowa:</b> ${EnergyCalculator.fmtW(def.ratedPowerW)}</div>
-      <div class="edu-term">${def.edu}</div>
-      <div class="edu-term"><b>Zużycie dzisiaj:</b> ${EnergyCalculator.fmtKWh(dailyKWh)} · <b>Koszt:</b> ${EnergyCalculator.fmtCost(dailyKWh*EnergyCalculator.effectivePrice(s),s.currency)}</div>
+      <div class="edu-term"><b>${I18n.t('ui.rated_power')}</b> ${EnergyCalculator.fmtW(def.ratedPowerW)}</div>
+      <div class="edu-term">${I18n.deviceEdu(def)}</div>
+      <div class="edu-term"><b>${I18n.t('ui.consumption_today')}</b> ${EnergyCalculator.fmtKWh(dailyKWh)} · <b>${I18n.t('ui.cost')}</b> ${EnergyCalculator.fmtCost(dailyKWh*EnergyCalculator.effectivePrice(s),s.currency)}</div>
       <div class="edu-term"><b>${I18n.t('tariff.title')}:</b> ${s.tariffCode} — ${I18n.t(TariffManager.get(s.tariffCode).shortDescKey)}</div>
-      <div class="edu-term"><b>W (Wat)</b> — jednostka mocy, czyli chwilowego tempa zużywania energii.</div>
+      <div class="edu-term"><b>${I18n.t('ui.w_watt')}</b> ${I18n.t('edu.power')}</div>
       <div class="edu-term"><b>kW</b> — 1000 W.</div>
-      <div class="edu-term"><b>Wh / kWh</b> — jednostka energii = moc × czas. 1 kWh = 1000 W przez 1 godzinę.</div>
-      <div class="edu-term"><b>Moc vs energia</b> — moc mówi "jak szybko", energia mówi "ile łącznie".</div>
-      <div class="edu-term"><b>Standby</b> — pobór mocy, gdy urządzenie jest "wyłączone", ale nadal podłączone.</div>
-      <div class="edu-term"><b>Cykl pracy</b> — powtarzalna sekwencja stanów (np. grzanie → pranie → wirowanie).</div>
-      <div class="edu-term"><b>Taryfa dzień/noc</b> — niektórzy dostawcy rozliczają energię inną ceną w nocy (zwykle taniej).</div>
-      <div class="edu-term"><b>Koszt energii</b> — energia [kWh] × cena [${s.currency}/kWh] obowiązująca w danej chwili.</div>`;
+      <div class="edu-term"><b>${I18n.t('ui.wh_kwh')}</b> ${I18n.t('edu.energy')}</div>
+      <div class="edu-term"><b>${I18n.t('ui.power_vs_energy')}</b> ${I18n.t('edu.powerVsEnergy')}</div>
+      <div class="edu-term"><b>Standby</b> ${I18n.t('edu.standby')}</div>
+      <div class="edu-term"><b>${I18n.t('ui.duty_cycle')}</b> ${I18n.t('edu.cycle')}</div>
+      <div class="edu-term"><b>${I18n.t('ui.day_night_tariff')}</b> ${I18n.t('edu.dayNight')}</div>
+      <div class="edu-term"><b>${I18n.t('ui.energy_cost')}</b> ${I18n.t('edu.cost', { cur: s.currency })}</div>`;
     document.getElementById('eduModal').classList.remove('hidden');
   }
 
@@ -1734,16 +2028,16 @@ class UIManager {
     if (this.achievements.has(id)) return;
     this.achievements.add(id);
     this.toast(text, true);
-    this.log(`Osiągnięcie odblokowane: ${text}`);
+    this.log(I18n.t('log.achievementUnlocked', { text }));
   }
   _checkAchievements(){
     const sc = this.analyticsManager.energyScore();
     if (sc.score>90) this._award('efficient_room', 'Efficient Room — Energy Score > 90');
-    if (this.automationManager.rules.length>=1) this._award('smart_home', 'Smart Home — utworzono pierwszą automatyzację');
+    if (this.automationManager.rules.length>=1) this._award('smart_home', I18n.t('ach.smartHome'));
     const disconnectedStandby = this.objectManager.getDevices().filter(d=>!d.connected && d.def.standbyPowerW>0).length;
-    if (disconnectedStandby>=3) this._award('standby_killer', 'Standby Killer — odłączono urządzenia ze standby');
+    if (disconnectedStandby>=3) this._award('standby_killer', I18n.t('ach.standbyKiller'));
     if (this.objectManager.getSolar().length>=1) this._award('sun_powered', 'Sun Powered — zamontowano pierwszy panel PV');
-    if (this.simulationEngine.currentGenW > this.simulationEngine.currentPowerW && this.objectManager.getSolar().length) this._award('net_positive', 'Net Positive — produkcja PV pokrywa całe bieżące zużycie');
+    if (this.simulationEngine.currentGenW > this.simulationEngine.currentPowerW && this.objectManager.getSolar().length) this._award('net_positive', I18n.t('ach.netPositive'));
   }
 
   // ============================================================
@@ -1824,7 +2118,7 @@ class UIManager {
     if (this.pvInstallMode){
       const house = this.getHouseState();
       const garage = house.rooms.find(r=>this.roomBuilder.roofGroups[r.id]) || house.rooms[0];
-      if (garage) this.setActiveRoom(garage.id);
+      if (garage) this.setActiveRoom(garage.id);   // any room whose roof can carry panels (mono-pitch / gable)
       this.currentCategory = 'solar';
       this.renderCategoryTabs(); this.renderAssetGrid();
       if (this.isMobile()) document.getElementById('leftPanel').classList.add('mobile-open');
@@ -2018,7 +2312,7 @@ class UIManager {
       </div>`;
     } else {
       const yb = this.analyticsManager.yearBreakdown();
-      body = `<table class="data-table"><thead><tr><th>${I18n.lang==='pl'?'Miesiąc':'Month'}</th><th>${I18n.t('stats.consumption')}</th><th>${I18n.t('stats.production')}</th><th>${I18n.t('stats.cost')}</th><th></th></tr></thead>
+      body = `<table class="data-table"><thead><tr><th>${I18n.t('common.month')}</th><th>${I18n.t('stats.consumption')}</th><th>${I18n.t('stats.production')}</th><th>${I18n.t('stats.cost')}</th><th></th></tr></thead>
         <tbody>${yb.months.map(mo=>`<tr><td>${mo.label}</td><td>${EnergyCalculator.fmtKWh(mo.consumedKWh)}</td><td>${EnergyCalculator.fmtKWh(mo.solarKWh)}</td><td>${EnergyCalculator.fmtCost(mo.cost,s.currency)}</td><td>${mo.isReal?`<span class="badge real">${I18n.t('common.real')}</span>`:mo.isPartial?`<span class="badge partial">~</span>`:`<span class="badge estimated">${I18n.t('common.estimate')}</span>`}</td></tr>`).join('')}</tbody>
         <tfoot><tr><td><b>${yb.year}</b></td><td><b>${EnergyCalculator.fmtKWh(yb.totals.consumedKWh)}</b></td><td><b>${EnergyCalculator.fmtKWh(yb.totals.solarKWh)}</b></td><td><b>${EnergyCalculator.fmtCost(yb.totals.cost,s.currency)}</b></td><td></td></tr></tfoot>
         </table>`;
