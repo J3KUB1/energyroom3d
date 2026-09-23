@@ -37,7 +37,7 @@ class ProjectManager {
     this.sim = simulationEngine || null;
     this.rebuildHouse = rebuildHouse;
     this.onLog = onLog || (()=>{});
-    this.projectName = 'Moj Dom';
+    this.projectName = 'Mój dom';
     this.history = []; this.future = [];
     this._suspend = false;
   }
@@ -55,10 +55,13 @@ class ProjectManager {
         position:i.position, rotation:i.rotation, scale:i.scale,
         connected:i.connected, schedule:i.schedule, manualOverride:i.manualOverride,
         socKWh: i.kind==='battery' ? i.runtime.socKWh : undefined,
+        storage: i.storage ? {...i.storage} : undefined,
+        pvFaulted: i.kind==='solar' ? !!i.runtime.faulted : undefined,
         slope: i.kind==='solar' ? (i.slope || 'a') : undefined,
         plugTo: (i.kind==='device' || i.kind==='electrical') ? (i.plugTo || null) : undefined,
         circuitId: i.kind==='electrical' ? (i.circuitId || null) : undefined,
         enabled: i.kind==='electrical' ? i.enabled !== false : undefined,
+        ev: i.ev ? {...i.ev} : undefined,
       })),
     };
   }
@@ -92,6 +95,9 @@ class ProjectManager {
           if (o.id) idMap[o.id] = inst.id;
           if (o.kind==='electrical'){ inst.circuitId = o.circuitId || null; inst.enabled = o.enabled !== false; inst.plugTo = o.plugTo || null; }
           else if (o.kind==='device') inst.plugTo = o.plugTo || null;
+          if (o.ev && inst.ev) inst.ev = Object.assign(inst.ev,o.ev);
+          if(o.storage&&inst.storage)inst.storage=Object.assign(inst.storage,o.storage);
+          if(o.kind==='solar')inst.runtime.faulted=!!o.pvFaulted;
           this.om.applyTransform(inst.id, o.position||{x:0,y:0,z:0}, o.rotation||{x:0,y:0,z:0}, o.scale||{x:1,y:1,z:1});
           if (o.customName) this.om.rename(inst.id, o.customName);
           if (typeof o.connected === 'boolean') this.om.setConnected(inst.id, o.connected);
@@ -160,7 +166,7 @@ class ProjectManager {
   }
 
   newProject(){
-    this.projectName = 'Nowy Dom';
+    this.projectName = 'Nowy dom';
     this.setHouseState(freshHouseState());
     this.rebuildHouse();
     this.setEnergySettings(freshEnergySettings());
@@ -251,17 +257,33 @@ function getRoomTypeMeta(type){ return ROOM_TYPE_META[type] || ROOM_TYPE_META.ro
 const DEFAULT_ROOM_SETTINGS = ROOM_TYPE_META.room.defaults;
 const DEFAULT_GARAGE_SETTINGS = ROOM_TYPE_META.garage.defaults;
 function defaultHouseState(){
+  const room = (id, type)=>({ id, name:I18n.roomType(type), type, settings:{...ROOM_TYPE_META[type].defaults}, offsetX:0, offsetZ:0 });
+  // A compact L-shaped family-home plan: kitchen opens to the lounge and bedroom,
+  // while the office joins the bedroom and lounge. Keep the garage by the driveway.
+  const rooms = [room('kitchen','kitchen'), room('living','living'), room('main','room'), room('office','office'), room('garage','garage'), room('garden','garden')];
+  rooms.find(r=>r.id==='main').name = I18n.t('roomtype.bedroom');
+  const positions = { kitchen:[0,0], living:[5,0], main:[0,4], office:[7,5.5], garage:[12.9,0], garden:[11.5,5.5] };
+  for (const r of rooms){ [r.offsetX,r.offsetZ] = positions[r.id]; }
   return {
-    rooms: [
-      { id:'main',   name:I18n.roomType('room'),  type:'room',   settings:{...DEFAULT_ROOM_SETTINGS},   offsetX:0 },
-      { id:'garage', name:I18n.roomType('garage'),  type:'garage', settings:{...DEFAULT_GARAGE_SETTINGS}, offsetX: DEFAULT_ROOM_SETTINGS.width + 1.4 },
-    ],
+    rooms,
+    layout:'free',
     activeRoomId: 'main',
     wallVisibility: 1,
   };
 }
-/** A ready-to-use house: same two rooms as before, now with levels / designs filled in. */
-function freshHouseState(){ return BuildingModel.migrateHouse(defaultHouseState()); }
+/** A ready-to-use starter house with levels, connected interior doors and per-room designs. */
+function freshHouseState(){
+  const house = BuildingModel.migrateHouse(defaultHouseState());
+  // Connect all four living areas. The kitchen is the owner of its south wall,
+  // and the bedroom/lounge own the shared walls with the office.
+  const kitchenDoor = house.rooms.find(r=>r.id==='kitchen').design.openings.find(o=>o.type==='door'&&o.wall==='E');
+  if (kitchenDoor){ kitchenDoor.doorType='interior'; kitchenDoor.open=0.72; }
+  const bedroomDoor = house.rooms.find(r=>r.id==='main').design.openings.find(o=>o.type==='door'&&o.wall==='E');
+  if (bedroomDoor){ bedroomDoor.pos=2.2; bedroomDoor.doorType='interior'; bedroomDoor.open=0.72; }
+  BuildingModel.addOpening(house,'kitchen',{type:'door',wall:'S',pos:2,width:.95,height:2.05,doorType:'interior',open:.72});
+  BuildingModel.addOpening(house,'living',{type:'door',wall:'S',pos:3.25,width:.95,height:2.05,doorType:'interior',open:.72});
+  return house;
+}
 
 /** Builds a brand-new {code: {rate:price}} / {code: richSchedule} pair for every tariff, so
  *  switching tariffs back and forth in Settings never loses a tariff's own customized hours/prices
@@ -282,6 +304,9 @@ function freshEnergySettings(){
     tariffCode:'G11', tariffPrices:prices, tariffSchedules:schedules,
     exportPricePerKWh: 0.35, pvPriority:'home_first', pvOrder:['home','battery','grid'],
     exportLimitW:null, importLimitW:null, batteryReservePct:10,
+    inverterMaxW:null,inverterEfficiency:0.96,pvSoilingPct:2,pvSnowPct:0,
+    realismMode:'arcade',
+    modernizations:{installed:{},investmentZl:0},energyAudit:null,energyAchievements:{unlocked:[],points:0},
     avgHouseholdKWhYear:2900,
     startDateISO: new Date().toISOString(),
   };

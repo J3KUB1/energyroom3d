@@ -41,7 +41,7 @@ class EnvironmentBuilder {
     for (const c of this.crowns){ c.scale.setScalar(k); }
   }
 
-  build(houseBounds){
+  build(houseBounds, houseState){
     while (this.group.children.length) this.group.remove(this.group.children[0]);
     this.occluders = []; this.leafMats = []; this.crowns = []; this.lawnMat = null;
     if (!Object.keys(houseBounds).length) return;
@@ -63,7 +63,7 @@ class EnvironmentBuilder {
     this._hedge(plotMinX, plotMaxX, plotMinZ, plotMaxZ);
     this._trees(plotMinX, plotMaxX, plotMinZ, plotMaxZ, houseBounds);
     this._garageDriveway(houseBounds, plotMinZ);
-    this._frontWalkway(houseBounds, plotMinZ);
+    this._frontWalkway(houseBounds, plotMinZ, houseState);
     this.setSeason(this.season); // re-apply the current season's colours to the freshly built meshes
   }
 
@@ -167,11 +167,13 @@ class EnvironmentBuilder {
   }
 
   /** A short paved path from off-plot to the main room's entry door (right wall, x=W plane). */
-  _frontWalkway(houseBounds, plotMinZ){
-    const mainId = Object.keys(houseBounds).find(id => id==='main') || Object.keys(houseBounds)[0];
+  _frontWalkway(houseBounds, plotMinZ, houseState){
+    const doorRoom = houseState && houseState.rooms.find(r=>r.id==='office') || houseState && houseState.rooms.find(r=>r.id==='main');
+    const mainId = doorRoom && doorRoom.id || Object.keys(houseBounds).find(id => id==='main') || Object.keys(houseBounds)[0];
     if (!mainId) return;
     const b = houseBounds[mainId];
-    const doorZ = 0.7 + 0.475; // matches RoomBuilder._wallWithDoor default door center offset
+    const entry = doorRoom && doorRoom.design && doorRoom.design.openings.find(o=>o.type==='door'&&o.wall==='E'&&o.doorType!=='interior');
+    const doorZ = (b.offsetZ||0) + (entry ? entry.pos + entry.width/2 : 1.175);
     const pathW = 1.1, endX = b.offsetX + b.width + 3.2;
     const startX = b.offsetX + b.width;
     const lenX = endX - startX;

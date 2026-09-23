@@ -145,8 +145,9 @@ test('deleting a socket (or a whole room) leaves no dangling wires / plugs after
   const so = a.el.sockets('garage')[0]; a.om.remove(so.id); a.el.prune();
   assert(!a.el.data.wires.some(w => w.toId === so.id));
   a.el.dropRoomCircuits('garage'); a.om.instances = a.om.instances.filter(i => i.roomId !== 'garage'); a.el.prune();
-  assert(a.el.data.circuits.length === 1, 'garage circuit removed: '+a.el.data.circuits.length);
-  assert(a.el.data.breakers.length === 1);
+  const remainingRooms=a.house.rooms.filter(r=>r.id!=='garage');
+  assert(a.el.data.circuits.length === remainingRooms.length, 'only circuits for the remaining rooms stay: '+a.el.data.circuits.length);
+  assert(a.el.data.breakers.length === remainingRooms.length);
 });
 test('newProject-style reload (load(null) + autoInstall) yields a valid, fully wired empty house', ()=>{
   const a = app(); a.el.load(null); a.el.autoInstall();

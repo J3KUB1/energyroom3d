@@ -18,8 +18,8 @@ function designedHouse(a){
 
 test('save format is version 6 and carries levels, designs, stairs, layout mode', ()=>{
   const a = app(); designedHouse(a); a.el.load(null); a.el.autoInstall(); const j = snapshot(a);
-  assert(j.version === 6, 'version '+j.version); assert(j.house.levels.length === 2 && j.house.stairs.length === 1 && j.house.layout === 'free');
-  assert(j.house.rooms.every(r => r.design && r.levelId)); assert(j.house.rooms[0].design.partitions.length === 1);
+  assert(j.version === 6, 'version '+j.version); assert(j.house.levels.length === 2 && j.house.stairs.length === 1 && j.house.layout === 'free', JSON.stringify({levels:j.house.levels.length,stairs:j.house.stairs.length,layout:j.house.layout}));
+  assert(j.house.rooms.every(r => r.design && r.levelId)); assert(j.house.rooms.find(r=>r.id==='main').design.partitions.length === 1);
 });
 test('round-trip keeps every design decision (walls, openings, roof, partitions, stairs, levels)', ()=>{
   const a = app(); designedHouse(a); a.el.load(null); a.el.autoInstall();
@@ -42,12 +42,13 @@ test('a pre-designer (v5) project loads: one level, legacy designs generated, ro
   legacy.house.rooms.forEach(r => { delete r.design; delete r.levelId; delete r.offsetZ; });
   const b = app(); b.pm.deserialize(legacy);
   assert(b.house.levels.length === 1 && b.house.layout === 'auto' && b.house.rooms.every(r => r.levelId === 'l0' && r.design));
-  assert(b.house.rooms[1].design.roof.type === 'mono' && b.house.rooms[1].design.openings.some(o => o.type === 'garage'), 'garage keeps its roof and door');
-  near(b.house.rooms[0].offsetX, 0); near(b.house.rooms[1].offsetX, 8.4);
+  const garage=b.house.rooms.find(r=>r.id==='garage');
+  assert(garage.design.roof.type === 'mono' && garage.design.openings.some(o => o.type === 'garage'), 'garage keeps its roof and door');
+  near(b.house.rooms.find(r=>r.id==='kitchen').offsetX, 0); near(garage.offsetX, 12.9);
 });
 test('a much older project without a house object falls back to a valid default house', ()=>{
   const a0 = app(); const j = snapshot(a0); delete j.house; j.version = 2; const b = app(); b.pm.deserialize(j);
-  assert(b.house.rooms.length === 2 && b.house.levels.length === 1);
+  assert(b.house.rooms.length === 6 && b.house.levels.length === 1);
 });
 test('installation on an upper storey: sockets get wired, cable is longer than on the ground floor, devices are powered', ()=>{
   const a = app(); designedHouse(a); a.om.addDevice('router',{x:0.5,y:0,z:0.4},'main'); a.om.addDevice('tv_55',{x:3,y:0.4,z:0.4},'up'); a.om.addDevice('ceiling_lamp',{x:2,y:0,z:2},'up');
@@ -62,7 +63,7 @@ test('installation on an upper storey: sockets get wired, cable is longer than o
 test('electrical positions use offsetZ and elevation: moving a room north/up changes wire length', ()=>{
   const a = app(); designedHouse(a); a.el.load(null); a.el.autoInstall();
   const s = a.el.sockets('garage')[0], w = a.el.wireOf(s.id), l0 = a.el.wireLengthM(w);
-  a.house.rooms[1].offsetZ = 6; const l1 = a.el.wireLengthM(w); assert(l1 > l0 + 4, `${l0} -> ${l1}`);
+  a.house.rooms.find(r=>r.id==='garage').offsetZ = 6; const l1 = a.el.wireLengthM(w); assert(l1 > l0 + 4, `${l0} -> ${l1}`);
 });
 test('deleting the upper room: its circuit goes away and the orphaned stairs are flagged', ()=>{
   const a = app(); designedHouse(a); a.el.load(null); a.el.autoInstall(); const nBefore = a.el.data.circuits.length;

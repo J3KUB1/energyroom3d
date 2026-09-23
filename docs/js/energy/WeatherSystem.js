@@ -144,6 +144,14 @@ class WeatherSystem {
 
   _condName(c){ return (typeof I18n!=='undefined') ? I18n.t(c.nameKey) : c.id; }
   _eventName(e){ return (typeof I18n!=='undefined') ? I18n.t(e.nameKey) : e.id; }
+  forceEvent(id, hours=12, startAbsMin=null){
+    const ev=WEATHER_EXTREME_EVENTS.find(x=>x.id===id); if(!ev)return false;
+    const now=startAbsMin==null?(this._lastHourKey==null?0:this._lastHourKey*60):startAbsMin;
+    this.active={...ev,startAbsMin:now,endAbsMin:now+Math.max(1,Math.round(hours*60))};
+    this.history.unshift(this.active); if(this.history.length>10)this.history.pop();
+    this.onEventChange(this.active); return true;
+  }
+  clearEvent(){if(this.active){this.active=null;this.onEventChange(null);}return true;}
 
   /** Combined multipliers for SimulationEngine: {solarMult, climateMult, heatingMult}.
    *  solarMult combines the continuous sky condition AND any active extreme event;
@@ -157,6 +165,17 @@ class WeatherSystem {
       skyFactor: this.factor,
       condition: this.condition,
     };
+  }
+
+  /** Rule-based outdoor temperature: seasonal mean, daily swing, sky and active extremes. */
+  outdoorTemperature(date,hour){
+    date=date||this.getSimDate();hour=hour==null?12:hour;
+    const season=SunPosition.seasonForDate(date),means={winter:0,spring:11,summer:22,autumn:10},swings={winter:5,spring:6,summer:7,autumn:5};
+    let t=means[season]+swings[season]*Math.sin((hour-8)*Math.PI/12);
+    if(this.condition&&this.condition.precip)t-=2;
+    if(this.active&&this.active.id==='heatwave')t+=7;
+    if(this.active&&this.active.id==='coldsnap')t-=8;
+    return t;
   }
 
   /** Deterministic seasonal-average factor for static analytics projections (week/month/year) - never random. */

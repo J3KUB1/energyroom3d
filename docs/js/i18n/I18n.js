@@ -129,7 +129,7 @@ const NAME_EN = {
   projector:'Projector', record_player:'Record Player', pendant_light:'Pendant Light', night_light:'Night Light',
   wine_fridge:'Wine Fridge', blender:'Blender', nas_drive:'NAS Server', video_doorbell:'Video Doorbell',
   garden_pump:'Garden Irrigation Pump', ebike_charger:'E-Bike/Scooter Charger', pool_pump:'Pool Pump',
-  outdoor_lighting:'Outdoor Lighting', lawn_mower_dock:'Robot Mower Dock', sauna_heater:'Electric Sauna Heater',
+  outdoor_lighting:'Outdoor Lighting', lawn_mower_dock:'Robot Mower Dock', electric_lawn_mower:'Electric Lawn Mower', irrigation_system:'Garden Irrigation System', sauna_heater:'Electric Sauna Heater',
   // furniture
   bed:'Bed', desk:'Desk', chair:'Chair', gaming_chair:'Gaming Chair', sofa:'Sofa', coffee_table:'Coffee Table',
   wardrobe:'Wardrobe', dresser:'Dresser', bookshelf:'Bookshelf', shelves:'Shelves', tv_stand:'TV Stand',
@@ -143,6 +143,7 @@ const NAME_EN = {
   kitchen_cabinet_wall:'Kitchen Wall Cabinet', bathroom_cabinet:'Bathroom Mirror Cabinet', bike_rack:'Bike Rack',
   bar_cart:'Bar Cart', shoe_rack:'Shoe Rack', laundry_basket:'Laundry Basket', trash_bin:'Trash Bin',
   car:'Car', workbench:'Workbench', garageshelf:'Workshop Shelving', tool_cabinet:'Tool Cabinet',
+  electric_car:'Electric Car', gazebo:'Garden Gazebo', garden_garage:'Detached Garage', rainwater_tank:'Rainwater Tank',
   // solar / battery
   panel_400:'PV Panel 400W', panel_330:'PV Panel 330W', panel_450:'PV Panel 450W (Half-Cut)',
   battery_5:'Energy Storage 5 kWh', battery_10:'Energy Storage 10 kWh', battery_15:'Energy Storage 15 kWh',

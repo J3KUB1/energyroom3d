@@ -77,6 +77,8 @@ const CATALOG_EN = {
   "pool_pump": "Pool pumps can use more energy in summer than many a fridge over a whole year — match the filtration time to the actual need.",
   "outdoor_lighting": "Dusk-controlled LED garden lighting shines only after dark, so its run time changes with the season.",
   "lawn_mower_dock": "The robot mower itself draws no power from the socket while mowing — the home's energy use shows only during charging in the docking station.",
+  "electric_lawn_mower": "An electric mower draws power while it is running. Shorter mowing and using it during PV production can reduce energy cost.",
+  "irrigation_system": "Scheduling watering in the morning reduces evaporation. The pump uses electricity only during the watering cycle.",
   "sauna_heater": "A sauna heater is one of the most energy-hungry household devices — 6 kW equals three electric boilers running at the same time."
 },
   note: {
@@ -152,6 +154,8 @@ const CATALOG_EN = {
   "pool_pump": "Filter pump for a small garden pool, runs a few hours a day in season.",
   "outdoor_lighting": "A set of several LED floodlights lighting the driveway/garden.",
   "lawn_mower_dock": "The robot mower spends most of its time in the dock, leaving for short mowing sessions.",
+  "electric_lawn_mower": "Electric lawn mower connected to the household installation; example schedule can be edited.",
+  "irrigation_system": "Controller and irrigation pump; watering days and times are editable in its schedule.",
   "sauna_heater": "Electric heater for a small home sauna (up to about 8 m³), three-phase supply.",
   "panel_400": "Typical 400 W monocrystalline panel (STC: 1000 W/m², 25°C) — real production depends on irradiance, roof angle and cloud cover.",
   "panel_330": "Older / cheaper 330 W polycrystalline panel.",

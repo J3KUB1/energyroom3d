@@ -59,13 +59,20 @@ class AnalyticsManager {
       for (let m=0; m<1440; m++){
         let minuteTotal = 0;
         for (const inst of instances){
-          const { powerW } = ScheduleManager.resolve(inst, dayBase+m);
+          const resolved=ScheduleManager.resolve(inst,dayBase+m);
+          let powerW=resolved.powerW;
+          if(typeof HomeEnergyManager!=='undefined')powerW=HomeEnergyManager.devicePower(inst,powerW,resolved.state,s);
           const kwh = EnergyCalculator.wattsMinutesToKWh(powerW,1);
           perDeviceThisDay[inst.id] = (perDeviceThisDay[inst.id]||0) + kwh;
           minuteTotal += powerW;
         }
         let minuteGen = 0;
-        for (const p of panels) minuteGen += SolarCalculator.resolve(p, dayBase+m, doy, skyFactor);
+        const moduleFactor=typeof HomeEnergyManager!=='undefined'?HomeEnergyManager.pvModuleFactor(s):1;
+        const cleanFactor=typeof HomeEnergyManager!=='undefined'?HomeEnergyManager.pvFactor(s):1;
+        const pvFactor=(s.realismMode==='realistic'?cleanFactor:s.realismMode==='educational'?Math.sqrt(cleanFactor):1)*moduleFactor;
+        for (const p of panels) if(!p.runtime.faulted)minuteGen+=SolarCalculator.resolve(p,dayBase+m,doy,skyFactor)*pvFactor;
+        minuteGen*=Math.max(.5,Math.min(1,+(s.inverterEfficiency??.96)));
+        if(s.inverterMaxW!=null)minuteGen=Math.min(minuteGen,Math.max(0,+s.inverterMaxW));
         dayTotal += EnergyCalculator.wattsMinutesToKWh(minuteTotal,1);
         dayGen += EnergyCalculator.wattsMinutesToKWh(minuteGen,1);
         const netW = minuteTotal - minuteGen;
@@ -101,8 +108,11 @@ class AnalyticsManager {
     for (let h=0; h<24; h++){
       for (let mm=0; mm<60; mm+=15){
         let sumW = 0, genW = 0;
-        for (const inst of instances) sumW += ScheduleManager.resolve(inst, weekday*1440 + h*60 + mm).powerW;
-        for (const p of panels) genW += SolarCalculator.resolve(p, weekday*1440 + h*60 + mm, doy, skyFactor);
+        for (const inst of instances){const x=ScheduleManager.resolve(inst,weekday*1440+h*60+mm);sumW+=typeof HomeEnergyManager!=='undefined'?HomeEnergyManager.devicePower(inst,x.powerW,x.state,this.getSettings()):x.powerW;}
+        const settings=this.getSettings(),moduleFactor=typeof HomeEnergyManager!=='undefined'?HomeEnergyManager.pvModuleFactor(settings):1,cleanFactor=typeof HomeEnergyManager!=='undefined'?HomeEnergyManager.pvFactor(settings):1,pvFactor=(settings.realismMode==='realistic'?cleanFactor:settings.realismMode==='educational'?Math.sqrt(cleanFactor):1)*moduleFactor;
+        for (const p of panels) if(!p.runtime.faulted)genW+=SolarCalculator.resolve(p,weekday*1440+h*60+mm,doy,skyFactor)*pvFactor;
+        genW*=Math.max(.5,Math.min(1,+(this.getSettings().inverterEfficiency??.96)));
+        if(this.getSettings().inverterMaxW!=null)genW=Math.min(genW,Math.max(0,+this.getSettings().inverterMaxW));
         hours[h] += EnergyCalculator.wattsMinutesToKWh(sumW,15);
         genHours[h] += EnergyCalculator.wattsMinutesToKWh(genW,15);
       }
@@ -121,7 +131,12 @@ class AnalyticsManager {
     let kwh = 0;
     for (const p of panels){
       for (let m=0; m<1440; m+=15){
-        kwh += EnergyCalculator.wattsMinutesToKWh(SolarCalculator.resolve(p, m, dayOfYear, skyFactor), 15);
+        const settings=this.getSettings();
+        const moduleFactor=typeof HomeEnergyManager!=='undefined'?HomeEnergyManager.pvModuleFactor(settings):1,cleanFactor=typeof HomeEnergyManager!=='undefined'?HomeEnergyManager.pvFactor(settings):1,pvFactor=(settings.realismMode==='realistic'?cleanFactor:settings.realismMode==='educational'?Math.sqrt(cleanFactor):1)*moduleFactor;
+        let w=p.runtime.faulted?0:SolarCalculator.resolve(p,m,dayOfYear,skyFactor)*pvFactor;
+        w*=Math.max(.5,Math.min(1,+(this.getSettings().inverterEfficiency??.96)));
+        if(this.getSettings().inverterMaxW!=null)w=Math.min(w,Math.max(0,+this.getSettings().inverterMaxW));
+        kwh += EnergyCalculator.wattsMinutesToKWh(w,15);
       }
     }
     if (sm && prevSeason) sm.setSeason(prevSeason);
@@ -216,7 +231,8 @@ class AnalyticsManager {
   batterySummary(sim){
     const batteries = this.getBatteryInstances ? this.getBatteryInstances() : [];
     if (!batteries.length) return { count:0 };
-    const totalCapKWh = batteries.reduce((a,b)=>a+b.def.capacityKWh,0);
+    const expansion=typeof HomeEnergyManager!=='undefined'?HomeEnergyManager.batteryCapacityFactor(this.getSettings()):1;
+    const totalCapKWh = batteries.reduce((a,b)=>a+b.def.capacityKWh*expansion,0);
     const totalSocKWh = batteries.reduce((a,b)=>a+(b.runtime.socKWh ?? b.def.capacityKWh*0.5),0);
     const chargingW = batteries.reduce((a,b)=>a+Math.max(0,b.runtime.powerW||0),0);
     const dischargingW = batteries.reduce((a,b)=>a+Math.max(0,-(b.runtime.powerW||0)),0);

@@ -129,7 +129,10 @@ class SceneManager {
     const diag = Math.hypot(w, d, (height||2.6));
     const dir = new THREE.Vector3(0.62, 0.52, 0.62).normalize();
     this.controls.target.set(cx, (elev||0) + (height||2.6)*0.32, cz);
-    this.camera.position.copy(this.controls.target).add(dir.multiplyScalar(Math.max(diag*0.82, 3.2)));
+    const distance = Math.max(diag*0.82, 3.2);
+    // Large multi-room houses need more zoom range to fit the overview without clipping.
+    this.controls.maxDistance = Math.max(this.controls.maxDistance, distance * 1.2);
+    this.camera.position.copy(this.controls.target).add(dir.multiplyScalar(distance));
     this.controls.update();
   }
 

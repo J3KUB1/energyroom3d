@@ -69,6 +69,10 @@ const FURNITURE_DEFINITIONS = [
 
   // ---- rozszerzenie: garaż ----
   { id:'bike_rack', name:'Stojak na rowery', modelType:'bikerack', footprint:[1.1,0.4], onlyIn:['garage'] },
+  { id:'electric_car', name:'Samochód elektryczny', modelType:'car', footprint:[1.9,4.4], onlyIn:['garage'] },
+  { id:'gazebo', name:'Altana ogrodowa', modelType:'gazebo', footprint:[3.2,3.2], onlyIn:['garden','terrace'] },
+  { id:'garden_garage', name:'Garaż wolnostojący', modelType:'gardengarage', footprint:[2.8,4.8], onlyIn:['garden'] },
+  { id:'rainwater_tank', name:'Zbiornik na deszczówkę', modelType:'rainwatertank', footprint:[1.1,1.1], onlyIn:['garden','terrace'] },
 
   // ---- rozszerzenie: ogólne (dowolny pokój) ----
   { id:'bar_cart',       name:'Barek na kółkach',   modelType:'barcart',      footprint:[0.5,0.35] },

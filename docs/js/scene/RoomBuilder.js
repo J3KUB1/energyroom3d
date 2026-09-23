@@ -38,7 +38,9 @@ class RoomBuilder {
     // floor grid: one per room, in ROOM-LOCAL coordinates so it lines up exactly with walls and with the
     // object snapping (TransformManager snaps in the same local frame). See _buildFloorGrid().
     this.gridStep = 0.25;      // metres - kept in sync with the snap selector
-    this.gridVisible = true;
+    // Keep the room presentation clean on first launch; snapping still works,
+    // and the grid remains one click away whenever precise placement is needed.
+    this.gridVisible = false;
     this.gridGroups = {};      // roomId -> THREE.Group
   }
 

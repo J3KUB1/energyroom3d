@@ -550,6 +550,20 @@ const ModelFactory = (() => {
     const led = box(0.015,0.015,0.01,0x111); put(led,0,0.28,0.12); addGlow(g,led,0x34d399,2.5); g.add(led);
     g.userData.footprint=[0.3,0.22]; return g;
   };
+  B.lawnmower = () => {
+    const g=grp(); const deck=box(0.58,0.18,0.48,0xd94a42,{rough:0.48}); put(deck,0,0.18,0); g.add(deck);
+    const motor=box(0.23,0.22,0.2,0x30383d,{rough:0.5,metal:0.2}); put(motor,0,0.35,-0.04); g.add(motor);
+    for(const x of [-0.31,0.31]) for(const z of [-0.17,0.17]){ const w=cyl(0.09,0.09,0.035,0x202326,14); put(w,x,0.09,z,0,0,Math.PI/2); g.add(w); }
+    const handle=box(0.035,0.58,0.035,0x545d62); put(handle,0,0.48,-0.26,-0.34,0,0); g.add(handle);
+    g.userData.footprint=[0.72,0.62]; return g;
+  };
+  B.irrigation = () => {
+    const g=grp(); const base=box(0.48,0.12,0.36,0x496b48); put(base,0,0.06,0); g.add(base);
+    const ctrl=box(0.25,0.22,0.16,0x29363a); put(ctrl,0,0.23,0); g.add(ctrl);
+    const pipe=cyl(0.035,0.035,0.48,0x477f9a,12); put(pipe,0.12,0.12,0.15,Math.PI/2,0,0); g.add(pipe);
+    const led=box(0.02,0.02,0.01,0x111); put(led,0.04,0.27,0.085); addGlow(g,led,0x34d399,2.5); g.add(led);
+    g.userData.footprint=[0.5,0.42]; return g;
+  };
   B.ebikecharger = () => {
     const g = grp();
     const body = box(0.2,0.28,0.1,0x1c2126,{rough:0.35,metal:0.3}); put(body,0,0,0); g.add(body);
@@ -1048,6 +1062,35 @@ const ModelFactory = (() => {
     const lightF = box(0.15,0.1,0.05,0xfff3d0,{rough:0.2}); put(lightF,0.7,0.5,2.08); addGlow(g,lightF,0xfff3d0,1.6); g.add(lightF);
     const lightF2 = lightF.clone(); lightF2.position.x=-0.7; g.add(lightF2);
     g.userData.footprint=[1.9,4.3]; g.userData.flat=false; return g;
+  };
+  B.gazebo = () => {
+    const g=grp(), wood=0x806445, roofColor=0x4e726c;
+    for(const x of [-1.45,1.45]) for(const z of [-1.45,1.45]){ const p=box(0.12,2.25,0.12,wood); put(p,x,1.125,z); g.add(p); }
+    const rim=box(3.15,0.12,3.15,wood); put(rim,0,2.2,0); g.add(rim);
+    const roof=box(3.5,0.14,3.5,roofColor); put(roof,0,2.48,0); g.add(roof);
+    const table=box(1.3,0.1,0.8,wood); put(table,0,0.78,0); g.add(table);
+    g.userData.footprint=[3.5,3.5]; return g;
+  };
+  B.gardengarage = () => {
+    const g=grp(), wall=0xe4e7e8, trim=0x46535c, roofColor=0x3f5965, door=0xb7c0c3;
+    const add=(w,h,d,color,x,y,z)=>{const m=box(w,h,d,color,{rough:0.75});put(m,x,y,z);g.add(m);return m;};
+    add(2.8,0.14,4.8,trim,0,0.07,0);
+    add(2.8,2.25,0.16,wall,0,1.2,-2.32);
+    add(0.16,2.25,4.8,wall,-1.32,1.2,0);
+    add(0.16,2.25,4.8,wall,1.32,1.2,0);
+    add(2.8,0.45,0.16,wall,0,2.05,2.32);
+    add(2.8,0.1,4.9,roofColor,0,2.38,0);
+    add(2.35,1.82,0.07,door,0,1.02,2.37);
+    for(let y=0.35;y<1.9;y+=0.28) add(2.32,0.035,0.025,trim,0,y,2.415);
+    add(0.24,0.08,0.08,trim,1.0,1.1,2.46);
+    g.userData.footprint=[2.8,4.9]; return g;
+  };
+  B.rainwatertank = () => {
+    const g=grp(), tank=cyl(0.52,0.58,1.35,0x4f8191,20,{rough:0.48}); put(tank,0,0.675,0); g.add(tank);
+    const lid=cyl(0.48,0.48,0.06,0x364d56,20); put(lid,0,1.38,0); g.add(lid);
+    const water=box(0.03,0.16,0.03,0x9bd8e8); put(water,0.5,0.62,0); g.add(water);
+    const tap=cyl(0.035,0.035,0.18,0x777f80,12); put(tap,0.55,0.32,0,0,0,Math.PI/2); g.add(tap);
+    g.userData.footprint=[1.2,1.2]; return g;
   };
   B.workbench = () => {
     const g = grp();

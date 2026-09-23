@@ -13,6 +13,8 @@ node tests/electrical.test.js
 node tests/integration_stage2.test.js
 node tests/integration_stage3.test.js
 node tests/models.test.js
+node tests/home_energy.test.js
+node tests/challenges.test.js
 node tests/browser_priority.test.js
 node tests/browser_installation.test.js
 node tests/browser_designer.test.js

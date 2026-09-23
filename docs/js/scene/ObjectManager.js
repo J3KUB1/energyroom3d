@@ -81,7 +81,7 @@ class ObjectManager {
     const def = getBatteryDefinition(defId);
     if (!def) return null;
     const inst = this._add('battery', def, pos, roomId);
-    if (inst) inst.runtime.socKWh = def.capacityKWh * 0.5; // start half-charged, like a real install
+    if (inst){ inst.runtime.socKWh = def.capacityKWh * 0.5; inst.storage={mode:'auto',sohPct:100,temperatureC:20,throughputKWh:0,maxChargeW:def.maxChargeW,maxDischargeW:def.maxDischargeW,reservePct:0}; }
     return inst;
   }
 
@@ -128,6 +128,7 @@ class ObjectManager {
       runtime: { state: kind==='device' ? (def.idleState||'off') : (kind==='solar' ? 'generating' : (kind==='battery' ? 'idle' : (kind==='electrical' ? 'off' : null))), powerW: 0, continuousOnMinutes:0, standbyMinutes:0, automationOverride:null, pendingAutomation:null },
     };
     if (kind==='device') inst.plugTo = null;                       // id of the socket / power strip it is plugged into
+    if (kind==='device' && def.id==='ev_charger') inst.ev = { capacityKWh:60, socKWh:30, maxPowerW:7400, targetPct:80, source:'auto', consumptionKWhPer100Km:18, todayKWh:0, todayCostZl:0, totalKWh:0 };
     if (kind==='electrical'){ inst.circuitId = null; inst.plugTo = null; inst.enabled = true; } // socket: circuit; strip: socket + on/off switch
     if (kind==='solar'){ inst.installedAtAbsMin = null; inst.slope = (extra && extra.slope) || 'a'; this.computePVOrientation(inst); }
     this.instances.push(inst);
@@ -158,7 +159,9 @@ class ObjectManager {
     copy.rotation = { ...inst.rotation };
     copy.scale = { ...inst.scale };
     copy.customName = inst.customName;
-    if (inst.kind==='device'){ copy.schedule = JSON.parse(JSON.stringify(inst.schedule)); copy.connected = inst.connected; copy.manualOverride = inst.manualOverride; }
+    if (inst.kind==='device'){ copy.schedule = JSON.parse(JSON.stringify(inst.schedule)); copy.connected = inst.connected; copy.manualOverride = inst.manualOverride; if(inst.ev) copy.ev={...inst.ev,todayKWh:0,todayCostZl:0}; }
+    if(inst.kind==='battery'){copy.runtime.socKWh=inst.runtime.socKWh;copy.storage={...inst.storage};}
+    if(inst.kind==='solar')copy.runtime.faulted=!!inst.runtime.faulted;
     if (inst.kind==='electrical' && inst.def.type==='socket') copy.circuitId = inst.circuitId;
     // note: solar panels auto-parent to the room's roof group inside addSolar (see getRoofGroup),
     // so the duplicate already lands on the correct roof without any extra reparenting here.

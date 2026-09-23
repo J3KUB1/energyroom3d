@@ -1,7 +1,7 @@
 /**
  * MAIN — application bootstrap.
- * Builds the manager graph, sets up the two-room demo house (bedroom +
- * garage), and starts the app. As of this version the garage roof
+ * Builds the manager graph, sets up the starter house (kitchen, lounge,
+ * bedroom, office and garage), and starts the app. The garage roof
  * starts with NO solar panels pre-installed (spec section 14) - the
  * player installs their own via the "PV install mode" toggle in the
  * top bar, which is what makes panel count/orientation/tilt a genuine
@@ -43,7 +43,7 @@
     roomBuilder.build(houseState);
     for (const r of houseState.rooms){ const b = roomBuilder.bounds[r.id]; objectManager.setRoomOffset(r.id, b.offsetX, b.offsetZ, b.elevation); }
     roomBuilder.setWallVisibility(houseState.wallVisibility ?? 1);
-    environmentBuilder.build(roomBuilder.bounds);
+    environmentBuilder.build(roomBuilder.bounds, houseState);
     // static shading geometry = buildings + trees; then fit the sun's shadow frustum to the whole plot
     shadeModel.setStaticOccluders(roomBuilder.occluders.concat(environmentBuilder.occluders));
     {
@@ -118,6 +118,7 @@
     getSolarInstances: ()=>objectManager.getAll().filter(i=>i.kind==='solar'),
     getBatteryInstances: ()=>objectManager.getAll().filter(i=>i.kind==='battery'),
     getSettings: ()=>energySettings,
+    getBuilding: ()=>building,
     getStartDate: ()=> new Date(energySettings.startDateISO || Date.now()),
     automationManager,
     weatherManager,
@@ -144,6 +145,12 @@
     getSim: ()=>simulationEngine,
   });
 
+  const challengeManager = new ChallengeManager({
+    simulationEngine, objectManager, analyticsManager, getHouseState:()=>houseState,
+  });
+  const homeEnergyManager = new HomeEnergyManager({simulationEngine,analyticsManager,objectManager,electrical,getSettings:()=>energySettings,setSettings:v=>{energySettings=v;},getHouseState:()=>houseState});
+  const homeOperationsManager = new HomeOperationsManager({simulationEngine,objectManager,getSettings:()=>energySettings,setSettings:v=>{energySettings=v;},getMode:()=>window.EnergyRoom3D?.ui?.experienceMode||'casual'});
+
   const projectManager = new ProjectManager({
     objectManager,
     getHouseState: ()=>houseState,
@@ -160,7 +167,7 @@
   const ui = new UIManager({
     sceneManager, roomBuilder, objectManager, transformManager, simulationEngine,
     analyticsManager, automationManager, projectManager, weatherManager, petManager,
-    questManager, advisorEngine, electrical, wireRenderer,
+    questManager, advisorEngine, electrical, wireRenderer, challengeManager, homeEnergyManager, homeOperationsManager,
     applyLevelView, getBuilding: ()=>building,
     getHouseState: ()=>houseState, setHouseState: (v)=>{ houseState=v; },
     getActiveRoom, getRoom,
@@ -223,40 +230,55 @@
   }
 
   function buildDemoMainRoom(){
-    const W = getRoom('main').settings.width, L = getRoom('main').settings.length;
-    const DESK_TOP = 0.72;
-    place('desk', W-1.9, 0.9, 0, true, null, 'main');
-    place('gaming_chair', W-1.9, 1.75, Math.PI, true, null, 'main');
-    place('gaming_pc', W-1.55, 0.62, 0, false, null, 'main');
-    place('monitor_27', W-2.05, 0.9, 0, false, DESK_TOP, 'main');
-    place('monitor_24', W-1.65, 0.9, -0.35, false, DESK_TOP, 'main');
-    place('console', W-2.3, 0.62, 0.1, false, null, 'main');
-    place('laptop_charger', W-1.85, 0.75, 0, false, DESK_TOP, 'main');
-    place('router', 0.35, 0.35, 0, false, null, 'main');
-
-    place('tv_stand', 3.4, L-0.35, 0, true, null, 'main');
-    place('tv_55', 3.4, L-0.35, 0, false, 0.4, 'main');
-    place('soundbar', 3.4, L-0.32, 0, false, 0.4, 'main');
-    place('sofa', 3.4, L-2.1, Math.PI, true, null, 'main');
-    place('rug', 3.4, L-2.0, 0, true, null, 'main');
-    place('coffee_table', 3.4, L-1.4, 0, true, null, 'main');
-    place('smart_speaker', 2.9, L-0.35, 0, false, 0.4, 'main');
-
-    place('bed', 1.2, 1.2, 0, true, null, 'main');
-    place('wardrobe', 0.65, L-0.45, Math.PI/2, true, null, 'main');
-    place('floor_lamp', 2.2, 1.6, 0, true, null, 'main');
-
-    place('fridge', W-0.5, L-0.5, -Math.PI/2, false, null, 'main');
-
+    // Give each example room a clear purpose instead of mixing bedroom,
+    // lounge, kitchen and office furniture in one space.
+    const bedroom = getRoom('main'), W = bedroom.settings.width, L = bedroom.settings.length;
+    place('bed', 1.25, 1.15, 0, true, null, 'main');
+    place('nightstand', 2.25, 1.2, 0, true, null, 'main');
+    place('wardrobe', W-0.45, L-1.0, Math.PI/2, true, null, 'main');
+    place('floor_lamp', 3.15, 1.35, 0, true, null, 'main');
+    place('desk_lamp', 2.25, 1.2, 0, false, 0.5, 'main');
     place('ceiling_lamp', W/2, L/2, 0, false, null, 'main');
-    place('led_strip', W-0.06, 1.1, Math.PI/2, false, null, 'main');
-    place('ac_unit', 2.2, 0.06, 0, false, null, 'main');
+
+    const living = getRoom('living'), LW = living.settings.width, LL = living.settings.length;
+    place('tv_stand', LW/2, LL-0.35, 0, true, null, 'living');
+    place('tv_55', LW/2, LL-0.35, 0, false, 0.4, 'living');
+    place('soundbar', LW/2, LL-0.32, 0, false, 0.4, 'living');
+    place('sofa', LW/2, LL-2.15, Math.PI, true, null, 'living');
+    place('rug', LW/2, LL-2.0, 0, true, null, 'living');
+    place('coffee_table', LW/2, LL-1.3, 0, true, null, 'living');
+    place('smart_speaker', LW/2-0.6, LL-0.35, 0, false, 0.4, 'living');
+    place('router', 0.35, 0.35, 0, false, null, 'living');
+    place('floor_lamp', 1.15, LL-2.25, 0, true, null, 'living');
+    place('ceiling_lamp', LW/2, LL/2, 0, false, null, 'living');
+
+    const kitchen = getRoom('kitchen'), KW = kitchen.settings.width, KL = kitchen.settings.length;
+    place('kitchen_counter', 0.75, 0.45, 0, true, null, 'kitchen');
+    place('kitchen_counter', 2.05, 0.45, 0, true, null, 'kitchen');
+    place('kitchen_sink', 2.05, 0.45, 0, true, 0.87, 'kitchen');
+    place('table', KW/2, KL-1.2, 0, true, null, 'kitchen');
+    place('dining_chair', KW/2, KL-0.35, 0, true, null, 'kitchen');
+    place('dining_chair', KW/2+0.9, KL-1.2, Math.PI/2, true, null, 'kitchen');
+    place('fridge', KW-0.45, KL-1.6, Math.PI/2, false, null, 'kitchen');
+    place('kettle', 0.9, 0.45, 0, false, 0.9, 'kitchen');
+    place('ceiling_lamp', KW/2, KL/2, 0, false, null, 'kitchen');
+
+    const office = getRoom('office'), OW = office.settings.width, OL = office.settings.length;
+    const DESK_TOP = 0.72;
+    place('desk', 1.35, 0.85, 0, true, null, 'office');
+    place('gaming_chair', 1.35, 1.7, Math.PI, true, null, 'office');
+    place('gaming_pc', 1.7, 0.57, 0, false, null, 'office');
+    place('monitor_27', 1.25, 0.85, 0, false, DESK_TOP, 'office');
+    place('laptop_charger', 1.6, 0.7, 0, false, DESK_TOP, 'office');
+    place('office_cabinet', OW-0.4, OL-0.5, 0, true, null, 'office');
+    place('ceiling_lamp', OW/2, OL/2, 0, false, null, 'office');
   }
 
   function buildDemoGarage(){
     const g = getRoom('garage');
     const W = g.settings.width, L = g.settings.length;
-    place('car', W*0.62, L*0.5, Math.PI/2, true, null, 'garage');
+    place('electric_car', W*0.62, L*0.5, Math.PI/2, true, null, 'garage');
+    place('ev_charger', W-0.25, L*0.5, Math.PI/2, false, 1.3, 'garage');
     place('workbench', 0.55, L-0.9, 0, true, null, 'garage');
     place('garageshelf', 0.5, 0.7, Math.PI/2, true, null, 'garage');
     place('ceiling_lamp', W*0.3, L*0.5, 0, false, null, 'garage');
@@ -269,6 +291,17 @@
     place('battery_10', W-0.35, L-1.9, Math.PI/2, false, null, 'garage', 'battery');
   }
 
+  function buildDemoGarden(){
+    const garden=getRoom('garden'); if(!garden) return;
+    const W=garden.settings.width,L=garden.settings.length;
+    place('gazebo',W*.34,L*.52,0,true,null,'garden');
+    place('garden_garage',W*.78,L*.5,0,true,null,'garden');
+    place('rainwater_tank',.65,.65,0,true,null,'garden');
+    place('outdoor_lighting',.45,L-.45,0,false,null,'garden');
+    place('irrigation_system',W-.7,L-1.0,0,false,null,'garden');
+    place('electric_lawn_mower',W*.48,L*.9,Math.PI/2,false,null,'garden');
+  }
+
   const hasSaved = projectManager.hasLocal();
   if (hasSaved){
     projectManager.loadLocal();
@@ -277,12 +310,14 @@
     simulationEngine._syncCalendarEpoch(); // re-anchor now that the definitive start date is set (see section 3 day-of-week note in SimulationEngine)
     buildDemoMainRoom();
     buildDemoGarage();
+    buildDemoGarden();
     electrical.load(null); electrical.autoInstall(); wireRenderer.markDirty();
   }
   projectManager.pushHistory();
   simulationEngine._recomputeInstant(false);
 
-  sceneManager.setView('home');
+  ui._focusActiveRoom();
 
-  window.EnergyRoom3D = { getBuilding: ()=>building, applyLevelView, electrical, wireRenderer, shadeModel, sceneManager, roomBuilder, environmentBuilder, objectManager, transformManager, simulationEngine, analyticsManager, automationManager, projectManager, weatherManager, petManager, questManager, advisorEngine, ui, buildDemoMainRoom, buildDemoGarage };
+  window.EnergyRoom3D = { getBuilding: ()=>building, applyLevelView, electrical, wireRenderer, shadeModel, sceneManager, roomBuilder, environmentBuilder, objectManager, transformManager, simulationEngine, analyticsManager, automationManager, projectManager, weatherManager, petManager, questManager, advisorEngine, homeOperationsManager, ui, buildDemoMainRoom, buildDemoGarage, buildDemoGarden };
+  try { if (!localStorage.getItem('energyroom_welcome_done')) ui.openWelcome(); } catch(e) { ui.openWelcome(); }
 })();

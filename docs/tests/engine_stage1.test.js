@@ -93,6 +93,11 @@ test('grid outage: no export, no import, unserved load reported', ()=>{
   near(r.flows.pvToGrid, 0); near(r.flows.gridToHome, 0);
   near(r.flows.pvToHome, 800); near(r.unservedW, 400);
 });
+test('preview recomputes do not fire the simulated-minute callback',()=>{
+  const {eng}=engine();let ticks=0;eng.onMinuteTick=()=>ticks++;
+  eng._recomputeInstant(false);near(ticks,0);
+  eng._recomputeInstant(true);near(ticks,1);
+});
 test('battery reserve SOC is respected on discharge', ()=>{
   const { eng, settings, batteries } = engine({ batteries:[1.0] });   // 10 % of 10 kWh
   settings.batteryReservePct = 10; settings.pvOrder = ['home','battery','grid'];
