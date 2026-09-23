@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>EnergyRoom 3D</title>
+<meta name="description" content="Interaktywny symulator 3D zużycia energii — pokój, garaż i panele fotowoltaiczne.">
+<meta name="theme-color" content="#0d121a">
+<!-- iOS: run full-screen from the home screen, no browser chrome -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EnergyRoom">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<!-- Android / Chrome: installable as a standalone app -->
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ TOP BAR ============ -->
+  <header id="topbar">
+    <div class="topbar-left">
+      <div class="logo"><span class="logo-mark">⚡</span><span class="logo-text">EnergyRoom<span class="logo-3d">3D</span></span></div>
+      <div class="project-name" id="projectNameLabel" title="Kliknij aby zmienić nazwę" data-i18n-title="ui.tip.renameProject">Mój dom</div>
+    </div>
+
+    <label class="experience-picker" for="experienceMode" data-i18n="experience.label">Tryb</label>
+    <select id="experienceMode" class="experience-select" aria-label="Tryb aplikacji" aria-describedby="experienceHint">
+      <option value="casual" data-i18n="experience.arcade">Arcade</option>
+      <option value="realistic" data-i18n="experience.realistic">Realistic</option>
+      <option value="kids" data-i18n="experience.educational">Edukacyjny</option>
+    </select>
+
+    <div class="topbar-center">
+      <div class="mode-switch" id="modeSwitch">
+        <button class="mode-btn active" data-mode="edit" data-i18n="mode.edit">Edycja</button>
+        <button class="mode-btn" data-mode="sim" data-i18n="mode.sim">Symulacja</button>
+      </div>
+      <div class="sim-controls hidden" id="simControls">
+        <button id="playPauseBtn" class="icon-btn" title="Play/Pause (Space)" data-i18n-title="ui.tip.playPause">▶</button>
+        <div class="sim-clock" id="simClock">08:00</div>
+        <select id="speedSelect" class="speed-select">
+          <option value="1">1x</option>
+          <option value="10">10x</option>
+          <option value="60">60x</option>
+          <option value="600">600x</option>
+        </select>
+        <div class="skip-group">
+          <button class="skip-btn" data-skip="06:00">06:00</button>
+          <button class="skip-btn" data-skip="12:00">12:00</button>
+          <button class="skip-btn" data-skip="18:00">18:00</button>
+          <button class="skip-btn" data-skip="00:00">00:00</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <button class="tb-btn kids-only" id="btnKidsGuide" title="Przewodnik" data-i18n-title="kids.guideButton">📘 <span data-i18n="kids.guideButton">Przewodnik</span></button>
+      <button class="tb-btn advanced-feature kids-hidden" id="btnUndo" title="Cofnij (Ctrl+Z)" data-i18n-title="ui.tip.undo">↺</button>
+      <button class="tb-btn advanced-feature kids-hidden" id="btnRedo" title="Ponów (Ctrl+Y)" data-i18n-title="ui.tip.redo">↻</button>
+      <button class="tb-btn" id="btnSave" title="Zapisz projekt" data-i18n-title="ui.tip.saveProject">💾</button>
+      <button class="tb-btn" id="btnLoad" title="Wczytaj projekt" data-i18n-title="ui.tip.loadProject">📂</button>
+      <button class="tb-btn advanced-feature kids-hidden" id="btnRoomSettings" title="Ustawienia pokoju" data-i18n-title="ui.tip.roomSettings">🏠 <span class="tb-label" data-i18n="ui.nav.room">Pokój</span></button>
+      <button class="tb-btn advanced-feature kids-hidden" id="btnSmartHome" title="Smart Home" data-i18n-title="ui.tip.smartHome">🧠 <span class="tb-label">Smart Home</span></button>
+      <button class="tb-btn accent" id="btnDashboard" title="Energy Dashboard" data-i18n-title="ui.tip.dashboard">📊 <span class="tb-label" data-i18n="ui.nav.dashboard">Dashboard</span></button>
+      <button class="tb-btn" id="btnDayPlanner" data-i18n-title="sched.dayPlan">🗓 <span class="tb-label" data-i18n="sched.dayPlan">Plan dnia</span></button>
+      <button class="tb-btn advanced-feature kids-hidden" id="btnHomeOps" data-i18n-title="homeOps.title">🏡 <span class="tb-label" data-i18n="homeOps.short">Dom</span></button>
+      <button class="tb-btn challenge-mode-btn" id="btnChallenges" title="Wyzwania" data-i18n-title="challenge.title">🎯 <span data-i18n="challenge.button">Wyzwania</span></button>
+      <button class="tb-btn advanced-feature kids-hidden" id="btnAudit" data-i18n-title="energy.audit">🔎 <span class="tb-label" data-i18n="energy.audit">Audyt</span></button>
+      <button class="tb-btn advanced-feature kids-hidden" id="btnUpgrades" data-i18n-title="energy.upgrades">🛠 <span class="tb-label" data-i18n="energy.upgrades">Modernizacje</span></button>
+      <button class="tb-btn" id="btnReport" data-i18n-title="energy.report">📑 <span class="tb-label" data-i18n="energy.report">Raport</span></button>
+      <button class="tb-btn advanced-feature kids-hidden" id="btnPvInstall" title="PV install" data-i18n-title="pv.installMode">☀ <span class="tb-label" data-i18n="pv.installMode">Instalacja PV</span></button>
+      <button class="tb-btn advanced-feature kids-hidden" id="btnDesigner" title="Projektant domu" data-i18n-title="bld.tip.open">🏗 <span class="tb-label" data-i18n="bld.btn">Projektant</span></button>
+      <button class="tb-btn advanced-feature kids-hidden" id="btnInstallation" title="Instalacja elektryczna" data-i18n-title="elec.tip.open">⚡ <span class="tb-label" data-i18n="elec.title">Instalacja</span></button>
+      <button class="tb-btn" id="btnSettings" title="Ustawienia" data-i18n-title="ui.tip.settings">⚙</button>
+      <button class="tb-btn" id="btnWelcome" title="Instrukcja" data-i18n-title="welcome.helpTitle">ⓘ</button>
+    </div>
+  </header>
+
+  <!-- ============ ROOM BAR — switch rooms + one-slider wall visibility ============ -->
+  <div id="roomBar">
+    <div id="experienceHint" class="experience-hint hidden" role="status"></div>
+    <div class="room-tabs level-tabs hidden" id="levelTabs" aria-label="Levels"></div>
+    <div class="room-tabs" id="roomTabs"></div>
+    <div id="weatherBadge" class="weather-badge hidden"></div>
+    <div class="wallvis-control">
+      <span class="wv-icon" title="Zamknięty dom" data-i18n-title="ui.tip.closedHouse">🏠</span>
+      <input type="range" id="wallVisRange" min="0" max="100" value="100">
+      <span class="wv-icon" title="Otwarty widok (bez ścian)" data-i18n-title="ui.tip.openView">👁</span>
+      <span id="wallVisLabel" class="wv-label">Zamknięty</span>
+    </div>
+  </div>
+
+  <!-- ============ MAIN LAYOUT ============ -->
+  <div id="main">
+
+    <!-- LEFT: asset panel -->
+    <aside id="leftPanel">
+      <div class="panel-context">
+        <div class="panel-context-title" data-i18n="ui.library.title">Dodaj do pomieszczenia</div>
+        <div class="panel-context-room" id="assetRoomName">Sypialnia</div>
+        <div class="panel-context-hint" id="assetRoomHint" data-i18n="ui.library.help">Wybierz kategorię, a potem kliknij element, aby go dodać.</div>
+      </div>
+      <section class="kids-learning-card" id="kidsLearningCard">
+        <div class="kids-learning-title"><span>✨</span><b data-i18n="kids.labTitle">Małe laboratorium energii</b></div>
+        <p data-i18n="kids.labIntro">Odkrywaj, co oznaczają liczby przy urządzeniach.</p>
+        <div class="kids-fact-row"><b>W</b><span data-i18n="kids.factW">Moc: jak szybko urządzenie zużywa energię.</span></div>
+        <div class="kids-fact-row"><b>kWh</b><span data-i18n="kids.factKwh">Energia: ile zużyło się przez pewien czas.</span></div>
+        <div class="kids-dynamic-fact"><span aria-hidden="true">💡</span><p id="kidsDynamicFact"></p></div>
+        <button class="kids-fact-next" id="kidsNextFact" data-i18n="kids.factNext">Następna ciekawostka</button>
+        <button class="kids-challenge-btn" id="btnKidsLesson" data-i18n="kids.lessonButton">🎯 Otwórz przewodnik</button>
+      </section>
+      <div class="panel-tabs" id="categoryTabs"></div>
+      <div class="asset-grid" id="assetGrid"></div>
+    </aside>
+
+    <!-- CENTER: viewport -->
+    <section id="viewport">
+      <div id="threeContainer"></div>
+
+      <!-- Mobile-only: toggles for the asset/properties drawers (hidden on desktop via CSS) -->
+      <button id="btnMobileAssets" class="mobile-fab left" title="Assety" data-i18n-title="ui.tip.assets">☰<span data-i18n="ui.panel.assets">Assety</span></button>
+      <button id="btnMobileProps" class="mobile-fab right" title="Właściwości" data-i18n-title="ui.tip.properties">ℹ<span data-i18n="ui.panel.properties">Właściwości</span></button>
+      <div id="mobileScrim" class="mobile-scrim hidden"></div>
+
+      <div class="viewport-toolbar">
+        <div class="tool-group" id="gizmoModeGroup">
+          <button class="tool-btn active" data-mode="translate" title="Move (W)" data-i18n-title="ui.tip.move">⬌ <span class="tb-label" data-i18n="ui.gizmo.move">Move</span></button>
+          <button class="tool-btn" data-mode="rotate" title="Rotate (E)" data-i18n-title="ui.tip.rotate">⟳ <span class="tb-label" data-i18n="ui.gizmo.rotate">Rotate</span></button>
+          <button class="tool-btn" data-mode="scale" title="Scale (R)" data-i18n-title="ui.tip.scale">⤢ <span class="tb-label" data-i18n="ui.gizmo.scale">Scale</span></button>
+        </div>
+        <div class="tool-group">
+          <button class="tool-btn" id="btnFocus" title="Focus (F)" data-i18n-title="ui.tip.focus">🎯</button>
+          <button class="tool-btn" id="btnDuplicate" title="Duplikuj (Ctrl+D)" data-i18n-title="ui.tip.duplicate">⧉</button>
+          <button class="tool-btn danger" id="btnDelete" title="Usuń (Del)" data-i18n-title="ui.tip.delete">🗑</button>
+        </div>
+        <div class="tool-group mobile-collapsible">
+          <label class="chk"><input type="checkbox" id="chkGrid"> <span data-i18n="ui.grid">Grid (G)</span></label>
+          <label class="chk"><input type="checkbox" id="chkSnap" checked> <span data-i18n="ui.snap">Snap</span></label>
+          <select id="gridSnapSelect" class="mini-select">
+            <option value="0.1">0.1m</option>
+            <option value="0.25" selected>0.25m</option>
+            <option value="0.5">0.5m</option>
+          </select>
+          <select id="rotSnapSelect" class="mini-select">
+            <option value="15" selected>15°</option>
+            <option value="30">30°</option>
+            <option value="45">45°</option>
+          </select>
+        </div>
+        <div class="tool-group mobile-collapsible">
+          <button class="tool-btn" data-view="home" title="Home" data-i18n-title="ui.tip.viewHome">⌂</button>
+          <button class="tool-btn" data-view="top" title="Top" data-i18n-title="ui.tip.viewTop" data-i18n="ui.view.top">⬇ Top</button>
+          <button class="tool-btn" data-view="front" title="Front" data-i18n-title="ui.tip.viewFront" data-i18n="ui.view.front">◻ Front</button>
+          <button class="tool-btn" data-view="left" title="Left" data-i18n-title="ui.tip.viewLeft" data-i18n="ui.view.left">◀ Left</button>
+          <button class="tool-btn" data-view="right" title="Right" data-i18n-title="ui.tip.viewRight" data-i18n="ui.view.right">▶ Right</button>
+        </div>
+      </div>
+
+      <div class="daynight-slider">
+        <span>🌙</span>
+        <input type="range" id="dayNightRange" min="0" max="24" step="0.1" value="10">
+        <span>☀</span>
+        <span id="dayNightLabel">10:00</span>
+      </div>
+
+      <div id="tooltip" class="tooltip hidden"></div>
+      <!-- Data-companion & advisor: still purely cosmetic itself (never changes energy numbers directly),
+           but now observes real simulation data and surfaces contextual tips + a task list (section 16-19). -->
+      <div id="petWidget" class="pet-widget" title="Twój asystent" data-i18n-title="ui.tip.pet">
+        <div id="petBubble" class="pet-bubble hidden" role="status" aria-live="polite"></div>
+        <div class="pet-avatar" id="petAvatar">✨</div>
+        <div class="pet-level-badge" id="petLevelBadge">1</div>
+        <div class="pet-tip-dot hidden" id="petTipDot"></div>
+      </div>
+      <div id="petPanel" class="pet-panel hidden">
+        <div class="pet-panel-header">
+          <input id="petNameInput" class="pet-name-input" value="Byte" maxlength="24">
+          <button class="modal-close" id="petPanelClose">✕</button>
+        </div>
+        <div class="pet-stage-row">
+          <div class="pet-avatar-big" id="petAvatarBig">✨</div>
+          <div class="pet-stage-info">
+            <div class="pet-stage-name" id="petStageName">Bit</div>
+            <div class="pet-level-label"><span data-i18n="pet.level">Poziom</span> <span id="petLevelNum">1</span></div>
+            <div class="pet-level-label" id="petMaxLabel" style="font-size:10px;opacity:0.7"></div>
+          </div>
+        </div>
+        <div class="xyz-head" style="grid-template-columns:1fr;margin-top:10px"><span data-i18n="pet.xp">DOŚWIADCZENIE</span></div>
+        <div class="soc-bar"><div class="soc-fill" id="petXpFill" style="width:0%"></div></div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:3px" id="petXpLabel">0 / 80 XP</div>
+        <div class="xyz-head" style="grid-template-columns:1fr;margin-top:12px"><span data-i18n="ui.pet.mood">NASTRÓJ</span></div>
+        <div class="soc-bar"><div class="soc-fill" id="petMoodFill" style="width:80%;background:linear-gradient(90deg,#67c8ff,#3ee79b)"></div></div>
+        <button class="primary-btn" id="petFeedBtn" style="width:100%;margin-top:14px" data-i18n="pet.feed">🍬 Nakarm bitami danych</button>
+        <div id="petTricks" class="pet-tricks"></div>
+        <div class="pet-tabs">
+          <button class="pet-tab active" data-pettab="tips" data-i18n="pet.tips">Porady</button>
+          <button class="pet-tab" data-pettab="quests" data-i18n="pet.quests">Zadania</button>
+          <button class="pet-tab" data-pettab="unlocks" data-i18n="pet.unlocks">Odblokowane</button>
+        </div>
+        <div class="pet-tab-pane" id="petPaneTips"></div>
+        <div class="pet-tab-pane hidden" id="petPaneQuests"></div>
+        <div class="pet-tab-pane hidden" id="petPaneUnlocks"></div>
+      </div>
+
+      <div id="tutorialOverlay" class="tutorial-overlay hidden">
+        <div class="tutorial-card">
+          <h3 data-i18n="ui.tut.title">Witaj w EnergyRoom 3D</h3>
+          <ul>
+            <li><b data-i18n="ui.tut.click.b">Kliknij obiekt</b><span data-i18n="ui.tut.click.t">, aby go zaznaczyć</span></li>
+            <li><b data-i18n="ui.tut.drag.b">Przeciągnij gizmo</b><span data-i18n="ui.tut.drag.t">, aby przesunąć / obrócić / przeskalować</span></li>
+            <li><b data-i18n="ui.tut.tabs.b">Zakładki pokoi</b><span data-i18n="ui.tut.tabs.t"> u góry przełączają między pokojami — w Ustawieniach pokoju (⚙) możesz dodać kolejne: kuchnię, łazienkę, salon lub biuro</span></li>
+            <li><b data-i18n="ui.tut.power.b">Włącz/wyłącz urządzenie</b><span data-i18n="ui.tut.power.t"> — przełącznik Power w panelu właściwości albo podwójne kliknięcie w scenie</span></li>
+            <li><b data-i18n="ui.tut.walls.b">Suwak ścian</b><span data-i18n="ui.tut.walls.t"> otwiera dom do widoku „domku dla lalek”</span></li>
+            <li><span data-i18n="ui.tut.dash.a">Otwórz </span><b data-i18n="ui.tut.dash.b">Panel energii</b><span data-i18n="ui.tut.dash.t">, aby analizować zużycie i produkcję PV</span></li>
+            <li><b data-i18n="ui.tut.pet.b">Zwierzak sieciowy</b><span data-i18n="ui.tut.pet.t"> w rogu ekranu żyje z ruchu danych — czysta zabawa, ale to on podpowiada, jak oszczędzać energię</span></li>
+          </ul>
+          <label class="chk"><input type="checkbox" id="dontShowAgain"> <span data-i18n="ui.tut.dontShow">Nie pokazuj ponownie</span></label>
+          <button class="primary-btn" id="closeTutorial" data-i18n="ui.tut.start">Rozumiem, zaczynajmy</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: properties panel -->
+    <aside id="rightPanel">
+      <div id="propEmpty" class="prop-empty" data-i18n="ui.props.empty">Zaznacz obiekt w scenie, aby zobaczyć jego właściwości.</div>
+      <div id="propContent" class="hidden"></div>
+    </aside>
+  </div>
+
+  <!-- ============ BOTTOM: expandable energy monitor ============ -->
+  <footer id="energyMonitor">
+    <button id="energyMonitorToggle" class="em-toggle" type="button" aria-expanded="false" aria-controls="energyMonitorContent">
+      <span class="em-toggle-chevron" aria-hidden="true">⌃</span>
+      <span data-i18n="footer.monitorTitle">Przepływy energii</span>
+      <span class="em-toggle-live"><span data-i18n="footer.usageNow">ZUŻYCIE TERAZ</span> <b id="emPowerCompact">0 W</b></span>
+    </button>
+    <div id="energyMonitorContent" class="em-content">
+    <div class="em-card"><div class="em-label" data-i18n="footer.usageNow">ZUŻYCIE TERAZ</div><div class="em-value" id="emPower">0 W</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="footer.pvProduction">PRODUKCJA PV</div><div class="em-value good" id="emGen">0 W</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="footer.netBalance">BILANS NETTO</div><div class="em-value" id="emNet">0 W</div></div>
+    <div class="em-card" id="emTodayCard"><div class="em-label" data-i18n="footer.today">DZISIAJ</div><div class="em-value" id="emToday">0.00 kWh</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="energy.monthUsage">Zużycie w tym miesiącu</div><div class="em-value" id="emMonthUsage">0.00 kWh</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="energy.importToday">POBÓR Z SIECI</div><div class="em-value" id="emGridToday">0.00 kWh</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="energy.exportToday">ODDANIE DO SIECI</div><div class="em-value" id="emExportToday">0.00 kWh</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="energy.priceNow">CENA TERAZ</div><div class="em-value" id="emPriceNow">0.00 PLN/kWh</div></div>
+    <div class="em-card" id="emCostTodayCard"><div class="em-label" data-i18n="footer.netCostToday">KOSZT NETTO DZIŚ</div><div class="em-value" id="emCostToday">0.00 PLN</div></div>
+    <div class="em-card" id="emCostMonthCard"><div class="em-label" data-i18n="footer.costMonth">KOSZT MIESIĄCA</div><div class="em-value" id="emCostMonth">0.00 PLN</div></div>
+    <div class="em-card" id="emCostYearCard"><div class="em-label" data-i18n="footer.costYear">KOSZT ROKU</div><div class="em-value" id="emCostYear">0.00 PLN</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="footer.active">AKTYWNE</div><div class="em-value" id="emActive">0</div></div>
+    <div class="em-card"><div class="em-label" data-i18n="footer.co2Year">CO₂ (rok, szac.)</div><div class="em-value" id="emCO2">0 kg</div></div>
+    <div class="em-card hidden" id="emBatteryCard"><div class="em-label" data-i18n="footer.battery">MAGAZYN ENERGII</div><div class="em-value" id="emBattery">0%</div></div>
+    </div>
+  </footer>
+</div>
+
+<!-- ============ DASHBOARD MODAL ============ -->
+<div class="modal-backdrop hidden" id="dashboardModal">
+  <div class="modal wide">
+    <div class="modal-header">
+      <h2 data-i18n="nav.dashboard">Energy Dashboard</h2>
+      <button class="modal-close" data-close="dashboardModal">✕</button>
+    </div>
+    <div class="modal-body" id="dashboardBody">
+      <div class="dash-cards" id="dashCards"></div>
+      <div class="dash-card-detail hidden" id="dashCardDetail"></div>
+      <div class="dash-tabs" id="dashTabs">
+        <button class="dtab active" data-tab="charts" data-i18n="dash.tab.charts">Wykresy</button>
+        <button class="dtab" data-tab="ranking" data-i18n="dash.tab.ranking">Ranking urządzeń</button>
+        <button class="dtab advanced-feature" data-tab="score" data-i18n="dash.tab.score">Efektywność</button>
+        <button class="dtab advanced-feature" id="tabSolar" data-tab="solar" data-i18n="ui.tab.energy">☀ Energia</button>
+        <button class="dtab advanced-feature" data-tab="stats">📅 <span data-i18n="dash.tab.stats">Statystyki</span></button>
+        <button class="dtab" data-tab="tariff">💶 <span data-i18n="tariff.priceTimeline">Ceny energii</span></button>
+        <button class="dtab advanced-feature" data-tab="savings">💰 <span data-i18n="dash.tab.savings">Oszczędności</span></button>
+        <button class="dtab advanced-feature" data-tab="scenarios">📐 <span data-i18n="dash.tab.scenarios">Scenariusze</span></button>
+        <button class="dtab advanced-feature" data-tab="whatif" data-i18n="dash.tab.whatif">Co jeśli?</button>
+        <button class="dtab advanced-feature" data-tab="compare" data-i18n="dash.tab.compare">Porównanie</button>
+      </div>
+      <div class="dash-pane" id="paneCharts">
+        <div class="chart-grid">
+          <div class="chart-box"><canvas id="chartPowerOverTime"></canvas></div>
+          <div class="chart-box"><canvas id="chartEnergyByHour"></canvas></div>
+          <div class="chart-box"><canvas id="chartEnergyByDevice"></canvas></div>
+          <div class="chart-box"><canvas id="chartCostOverTime"></canvas></div>
+          <div class="chart-box"><canvas id="chartDailyComparison"></canvas></div>
+          <div class="chart-box"><canvas id="chartWeekly"></canvas></div>
+          <div class="chart-box"><canvas id="chartMonthly"></canvas></div>
+          <div class="chart-box"><canvas id="chartPvOutput"></canvas></div>
+          <div class="chart-box"><canvas id="chartGridFlow"></canvas></div>
+          <div class="chart-box"><canvas id="chartBatteryFlow"></canvas></div>
+        </div>
+      </div>
+      <div class="dash-pane hidden" id="paneRanking">
+        <div class="top5" id="top5Ranking"></div>
+        <table class="data-table" id="rankingTable"><thead><tr>
+          <th data-i18n="ui.th.device">Urządzenie</th><th data-i18n="ui.th.power">Moc</th><th data-i18n="ui.th.kwhDay">kWh/dzień</th><th data-i18n="ui.th.kwhMonth">kWh/mies.</th><th data-i18n="ui.th.costMonth">Koszt/mies.</th><th data-i18n="ui.th.pctTotal">% całości</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+      <div class="dash-pane hidden" id="paneScore">
+        <div class="score-panel" id="scorePanel"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneSolar">
+        <div id="paneSolarInner"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneStats">
+        <div id="statsInner"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneTariff"><div id="tariffTimelineInner"></div></div>
+      <div class="dash-pane hidden" id="paneSavings">
+        <div id="savingsInner"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneScenarios">
+        <div id="scenariosPanel"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneWhatif">
+        <div class="whatif-panel" id="whatifPanel"></div>
+      </div>
+      <div class="dash-pane hidden" id="paneCompare">
+        <div class="compare-panel" id="comparePanel"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CHALLENGE MODE ============ -->
+<div class="modal-backdrop hidden" id="challengesModal">
+  <div class="modal wide challenge-modal">
+    <div class="modal-header"><div><h2 data-i18n="challenge.title">Tryb wyzwań</h2><p class="modal-subtitle" data-i18n="challenge.intro">Ustaw cel, zmieniaj dom i obserwuj postęp w symulacji.</p></div><button class="modal-close" data-close="challengesModal">✕</button></div>
+    <div class="modal-body" id="challengesBody"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="upgradesModal"><div class="modal wide"><div class="modal-header"><div><h2 data-i18n="energy.upgrades">Modernizacje domu</h2><p class="modal-subtitle" data-i18n="upgrade.intro">Inwestycje zmieniające zużycie w bieżącej symulacji.</p></div><button class="modal-close" data-close="upgradesModal">✕</button></div><div class="modal-body" id="upgradesBody"></div></div></div>
+<div class="modal-backdrop hidden" id="auditModal"><div class="modal wide"><div class="modal-header"><div><h2 data-i18n="energy.audit">Audyt energetyczny</h2><p class="modal-subtitle" data-i18n="audit.intro">Analiza zużycia, strat, PV i instalacji w tym projekcie.</p></div><button class="modal-close" data-close="auditModal">✕</button></div><div class="modal-body" id="auditBody"></div></div></div>
+<div class="modal-backdrop hidden" id="reportModal"><div class="modal wide"><div class="modal-header"><div><h2 data-i18n="energy.report">Raport końcowy</h2><p class="modal-subtitle" data-i18n="report.intro">Podsumowanie danych z rozegranej symulacji.</p></div><button class="modal-close" data-close="reportModal">✕</button></div><div class="modal-body" id="reportBody"></div></div></div>
+<div class="modal-backdrop hidden" id="homeOpsModal"><div class="modal wide"><div class="modal-header"><div><h2 data-i18n="homeOps.title">Dom i utrzymanie</h2><p class="modal-subtitle" data-i18n="homeOps.intro">Mieszkańcy, konserwacja, scenariusze i przepływ energii.</p></div><button class="modal-close" data-close="homeOpsModal">✕</button></div><div class="modal-body" id="homeOpsBody"></div></div></div>
+
+<!-- ============ ROOM SETTINGS MODAL ============ -->
+<div class="modal-backdrop hidden" id="roomSettingsModal">
+  <div class="modal">
+    <div class="modal-header"><h2 data-i18n="nav.roomSettings">Room Settings</h2><button class="modal-close" data-close="roomSettingsModal">✕</button></div>
+    <div class="modal-body" id="roomSettingsBody"></div>
+  </div>
+</div>
+
+<!-- ============ SMART HOME MODAL ============ -->
+<aside id="designerDock" class="designer-dock hidden" aria-label="House designer"><div id="designerBody"></div></aside>
+
+<div class="modal-backdrop hidden" id="installModal">
+  <div class="modal wide">
+    <div class="modal-header"><h2 data-i18n="elec.modalTitle">Instalacja elektryczna</h2><button class="modal-close" data-close="installModal">✕</button></div>
+    <div class="modal-body" id="installBody"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="smartHomeModal">
+  <div class="modal wide">
+    <div class="modal-header"><h2 data-i18n="ui.smart.title">Smart Home — Automatyzacje</h2><button class="modal-close" data-close="smartHomeModal">✕</button></div>
+    <div class="modal-body" id="smartHomeBody"></div>
+  </div>
+</div>
+
+<!-- ============ SETTINGS MODAL ============ -->
+<div class="modal-backdrop hidden" id="settingsModal">
+  <div class="modal">
+    <div class="modal-header"><h2 data-i18n="settings.title">Ustawienia</h2><button class="modal-close" data-close="settingsModal">✕</button></div>
+    <div class="modal-body" id="settingsBody"></div>
+  </div>
+</div>
+
+<!-- ============ SCHEDULE EDITOR MODAL (device schedules + tariff rate schedules, section 3) ============ -->
+<div class="modal-backdrop hidden" id="scheduleModal">
+  <div class="modal wide">
+    <div class="modal-header"><h2 id="scheduleModalTitle">🕐 Harmonogram</h2><button class="modal-close" data-close="scheduleModal">✕</button></div>
+    <div class="modal-body" id="scheduleModalBody"></div>
+  </div>
+</div>
+
+<!-- ============ NEW SIMULATION WIZARD MODAL (section 29) ============ -->
+<div class="modal-backdrop hidden" id="newSimModal">
+  <div class="modal">
+    <div class="modal-header"><h2 data-i18n="newsim.title">Nowa symulacja</h2><button class="modal-close" data-close="newSimModal">✕</button></div>
+    <div class="modal-body" id="newSimModalBody"></div>
+  </div>
+</div>
+
+<!-- ============ FIRST-RUN WELCOME / QUICK SETUP ============ -->
+<div class="modal-backdrop hidden" id="welcomeModal">
+  <div class="modal welcome-modal">
+    <div class="welcome-hero">
+      <div class="welcome-mark">⚡</div>
+      <div><div class="welcome-eyebrow">ENERGYROOM 3D</div><h2 data-i18n="welcome.title">Witaj w EnergyRoom 3D</h2><p data-i18n="welcome.lede">Ustaw podstawy i zacznij urządzać swój dom.</p></div>
+      <button class="modal-close" id="welcomeClose" data-close="welcomeModal" aria-label="Zamknij">✕</button>
+    </div>
+    <div class="modal-body welcome-body">
+      <div class="welcome-fields">
+        <label><span data-i18n="welcome.mode">Tryb aplikacji</span><select id="welcomeMode" class="std-select"><option value="casual" data-i18n="experience.casual">Casual</option><option value="realistic" data-i18n="experience.realistic">Realistic</option><option value="kids" data-i18n="experience.kids">Edukacja dla dzieci</option></select></label>
+        <label><span data-i18n="welcome.price">Cena prądu</span><div class="welcome-price"><input id="welcomePrice" class="std-input" type="number" min="0.01" max="20" step="0.01"><span data-i18n="welcome.priceUnit">PLN/kWh</span></div></label>
+        <label class="welcome-pet"><span data-i18n="welcome.petName">Imię zwierzaka</span><input id="welcomePetName" class="std-input" maxlength="24"></label>
+      </div>
+      <h3 class="welcome-how" data-i18n="welcome.howTitle">Jak zacząć</h3>
+      <div class="welcome-steps">
+        <article><b>01</b><h4 data-i18n="welcome.step1.title">Wybierz pokój</h4><p data-i18n="welcome.step1.desc">Przełączaj pomieszczenia na pasku nad widokiem 3D.</p></article>
+        <article><b>02</b><h4 data-i18n="welcome.step2.title">Dodaj element</h4><p data-i18n="welcome.step2.desc">Wybierz kategorię po lewej i kliknij mebel lub urządzenie.</p></article>
+        <article><b>03</b><h4 data-i18n="welcome.step3.title">Urządź i sprawdź</h4><p data-i18n="welcome.step3.desc">Przeciągaj obiekty, a potem uruchom symulację i sprawdź zużycie.</p></article>
+      </div>
+      <div class="welcome-actions"><button class="small-btn" id="welcomeSkip" data-i18n="welcome.skip">Pomiń</button><button class="primary-btn" id="welcomeStart" data-i18n="welcome.start">Zapisz i zacznij</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PV INSTALL MODE BANNER (sections 14/15) ============ -->
+<div id="pvInstallBanner" class="pv-install-banner hidden">
+  <div class="pv-install-text">
+    <b>☀ <span data-i18n="pv.installMode">Instalacja PV</span></b>
+    <span id="pvInstallHint" data-i18n="pv.installHint"></span>
+  </div>
+  <div class="pv-install-stats" id="pvInstallStats"></div>
+  <button class="primary-btn" id="pvInstallFinishBtn" data-i18n="pv.finishInstall">Zakończ instalację</button>
+</div>
+
+<!-- ============ EDU MODAL ============ -->
+<div class="modal-backdrop hidden" id="eduModal">
+  <div class="modal">
+      <div class="modal-header"><h2 id="eduTitle">Jak działa zużycie energii?</h2><button class="modal-close" data-close="eduModal">✕</button></div>
+    <div class="modal-body" id="eduBody"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="kidsTutorialModal">
+  <div class="modal kids-tutorial-modal">
+    <div class="kids-tutorial-top"><div class="kids-tutorial-icon" id="kidsTutorialIcon">🏠</div><button class="modal-close" id="kidsTutorialClose" data-close="kidsTutorialModal" aria-label="Zamknij">✕</button></div>
+    <div class="modal-body kids-tutorial-body">
+      <div class="kids-progress" id="kidsTutorialProgress"></div>
+      <div class="kids-step-label" id="kidsTutorialStep"></div>
+      <h2 id="kidsTutorialTitle"></h2>
+      <p id="kidsTutorialText"></p>
+      <div class="kids-tip" id="kidsTutorialTip"></div>
+      <div class="kids-tutorial-actions"><button class="small-btn" id="kidsTutorialBack" data-i18n="kids.back">Wstecz</button><button class="primary-btn" id="kidsTutorialNext" data-i18n="kids.next">Dalej</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DEBUG LOG PANEL ============ -->
+<div id="logPanel" class="log-panel hidden">
+  <div class="log-header"><span data-i18n="ui.log.title">Dziennik zdarzeń</span> <button id="closeLog">✕</button></div>
+  <div class="log-body" id="logBody"></div>
+</div>
+<button id="btnToggleLog" class="log-toggle" title="Debug log" data-i18n-title="ui.tip.debugLog">🖥</button>
+
+<!-- ================= LIBRARIES (CDN) ================= -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+
+<!-- ================= APP (logical modules, plain scripts = one shared global scope for a simple no-build setup) ================= -->
+<script src="js/data/devices.js"></script>
+<script src="js/data/furniture.js"></script>
+<script src="js/data/solar.js"></script>
+<script src="js/data/battery.js"></script>
+<script src="js/data/electrical.js"></script>
+<script src="js/data/building.js"></script>
+<script src="js/i18n/dictionary.js"></script>
+<script src="js/i18n/catalog_en.js"></script>
+<script src="js/i18n/I18n.js"></script>
+<script src="js/energy/ScheduleManager.js"></script>
+<script src="js/energy/SunPosition.js"></script>
+<script src="js/energy/TariffManager.js"></script>
+<script src="js/energy/EnergyCalculator.js"></script>
+<script src="js/energy/ShadeModel.js"></script>
+<script src="js/energy/SolarCalculator.js"></script>
+<script src="js/energy/WeatherSystem.js"></script>
+<script src="js/scene/DayNightCycle.js"></script>
+<script src="js/scene/WireRenderer.js"></script>
+<script src="js/scene/SceneManager.js"></script>
+<script src="js/scene/TextureFactory.js"></script>
+<script src="js/scene/RoomBuilder.js"></script>
+<script src="js/scene/EnvironmentBuilder.js"></script>
+<script src="js/scene/ModelFactory.js"></script>
+<script src="js/scene/ObjectManager.js"></script>
+<script src="js/scene/TransformManager.js"></script>
+<script src="js/energy/ElectricalSystem.js"></script>
+<script src="js/energy/BuildingModel.js"></script>
+<script src="js/energy/SimulationEngine.js"></script>
+<script src="js/analytics/AnalyticsManager.js"></script>
+<script src="js/energy/HomeEnergyManager.js"></script>
+<script src="js/energy/HomeOperationsManager.js"></script>
+<script src="js/challenges/ChallengeManager.js"></script>
+<script src="js/automation/AutomationManager.js"></script>
+<script src="js/pet/PetManager.js"></script>
+<script src="js/pet/QuestManager.js"></script>
+<script src="js/pet/AdvisorEngine.js"></script>
+<script src="js/project/ProjectManager.js"></script>
+<script src="js/ui/PriorityList.js"></script>
+<script src="js/ui/InstallationPanel.js"></script>
+<script src="js/ui/DesignerPanel.js"></script>
+<script src="js/ui/UIManager.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
