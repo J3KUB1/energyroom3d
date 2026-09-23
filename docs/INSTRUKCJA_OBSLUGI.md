@@ -1,575 +1,154 @@
 # Instrukcja obsługi EnergyRoom 3D
 
+> Instrukcja dla aktualnej wersji projektu znajdującej się w katalogu **EnergyRoom3D 7.11**.
+
 ## 1. O aplikacji
 
-EnergyRoom 3D to interaktywny symulator domu, w którym można zaprojektować pomieszczenia, ustawić meble i urządzenia, skonfigurować instalację elektryczną, panele fotowoltaiczne oraz magazyny energii.
+EnergyRoom 3D to interaktywny symulator domu. Pozwala projektować pomieszczenia, ustawiać meble i urządzenia, konfigurować instalację elektryczną, fotowoltaikę, magazyn energii i automatyzacje.
 
-Aplikacja oblicza między innymi:
-
-- aktualne zużycie energii,
-- produkcję energii z paneli PV,
-- bilans energii,
-- zużycie w kWh,
-- koszt energii w PLN,
-- szacowany koszt miesiąca i roku,
-- szacowaną emisję CO2,
-- pracę magazynu energii,
-- zużycie poszczególnych urządzeń.
-
-Aplikacja działa w przeglądarce i może być używana bez konta.
+Aplikacja pokazuje zużycie energii, produkcję PV, pobór i oddanie do sieci, bilans, koszty, magazyn energii, pogodę, dzień i noc, zacienienie PV, instalację elektryczną, harmonogramy, modernizacje, audyt, wyzwania i raporty.
 
 ## 2. Uruchomienie
 
-1. Otwórz stronę EnergyRoom 3D.
-2. Wybierz przycisk wejścia do symulatora.
-3. Po uruchomieniu pojawi się widok domu 3D.
-4. Na początku dostępny jest tryb Edycja.
-5. Zaznacz obiekt lub pomieszczenie, aby rozpocząć pracę.
-
-Aplikacja może również zostać zainstalowana jako aplikacja przeglądarkowa na urządzeniu obsługującym PWA.
+Uruchom aplikację w przeglądarce. Przy pierwszym uruchomieniu wybierz tryb, cenę energii i opcjonalnie nazwę zwierzaka. Dostępne są tryby **Arcade**, **Realistic** i **Edukacyjny**. Tryb można później zmienić.
 
 ## 3. Główny ekran
 
-### Górny pasek
+Górny pasek zawiera: **Edycja**, **Symulacja**, **Cofnij**, **Ponów**, **Zapisz**, **Wczytaj**, **Pokój**, **Smart Home**, **Dashboard**, **Plan dnia**, **Dom**, **Wyzwania**, **Audyt**, **Modernizacje**, **Raport**, **Instalacja PV**, **Projektant**, **Instalacja**, **Ustawienia** i przycisk **Instrukcja**. Funkcje zaawansowane mogą być ukryte w trybie Edukacyjnym.
 
-W górnym pasku znajdują się:
+## 4. Tryby pracy
 
-- **Edycja** - budowanie i zmienianie domu.
-- **Symulacja** - uruchamianie obliczeń zużycia energii.
-- **Cofnij** - cofa ostatnią zmianę.
-- **Ponów** - przywraca cofniętą zmianę.
-- **Zapisz** - zapisuje projekt na urządzeniu.
-- **Wczytaj** - wczytuje zapisany projekt.
-- **Pokój** - ustawienia pomieszczeń.
-- **Smart Home** - ustawienia automatyzacji.
-- **Dashboard** - szczegółowe informacje o energii.
-- **Instalacja PV** - ustawianie paneli fotowoltaicznych.
-- **Projektant** - rozbudowa domu.
-- **Instalacja** - konfiguracja instalacji elektrycznej.
-- **Ustawienia** - ustawienia aplikacji i symulacji.
+**Arcade** upraszcza korzystanie z symulatora. **Realistic** uwzględnia bardziej szczegółowo pogodę, temperaturę, sezon, ogrzewanie, PV, baterię, taryfy i instalację. **Edukacyjny** upraszcza interfejs i zawiera Małe laboratorium energii oraz przewodnik.
 
-Nazwę projektu można zmienić, klikając nazwę projektu w górnej części ekranu.
+## 5. Pomieszczenia i poziomy
 
-## 4. Pomieszczenia
+Przełączaj pomieszczenia na pasku nad sceną. W rozbudowanym domu można przełączać poziomy. Dostępne są m.in. pokój, garaż, kuchnia, łazienka, salon, biuro, piwnica, balkon, taras i ogród. Widok **Cały dom** pokazuje całość, a suwak ścian zmienia ich widoczność.
 
-Na pasku pod górnym menu znajdują się pomieszczenia.
+## 6. Dodawanie urządzeń i mebli
 
-Kliknięcie pomieszczenia pokazuje jego widok.
+W lewej bibliotece wybierz kategorię, kliknij element i zostanie on dodany do aktywnego pomieszczenia. Następnie zaznacz go i ustaw położenie oraz właściwości.
 
-Dostępne są między innymi:
+## 7. Obiekty i transformacje
 
-- pokój,
-- garaż,
-- kuchnia,
-- łazienka,
-- salon,
-- biuro,
-- pomieszczenie gospodarcze,
-- piwnica,
-- balkon,
-- taras,
-- ogród.
+Kliknięcie obiektu otwiera panel właściwości. **W** przesuwa, **E** obraca, **R** skaluje, **F** skupia kamerę, **Ctrl+D** duplikuje, a **Delete** usuwa. Podwójne kliknięcie urządzenia może przełączać jego stan.
 
-W zależności od projektu dostępne mogą być również dodatkowe poziomy domu.
+## 8. Siatka i kamera
 
-### Widok całego domu
+Siatka obsługuje odstępy 0,1 m, 0,25 m i 0,5 m. Obrót może być ustawiony na 15, 30 lub 45 stopni. **G** przełącza siatkę. Widoki kamery: Home, Top, Front, Left i Right. W aktualnej wersji siatka może startować jako wyłączona.
 
-Przycisk **Cały dom** pokazuje wszystkie pomieszczenia jednocześnie.
+## 9. Dzień, noc, pogoda i sezon
 
-### Widoczność ścian
+Suwak czasu zmienia słońce, jasność, cienie, niebo, gwiazdy, księżyc, oświetlenie i produkcję PV. Pogoda wpływa na światło, temperaturę i PV. W trybie Realistic sezon wpływa także na temperaturę oraz zapotrzebowanie na ogrzewanie i chłodzenie.
 
-Suwak znajdujący się po prawej stronie paska pomieszczeń pozwala zmienić widoczność ścian.
+## 10. Symulacja
 
-- zamknięty widok pokazuje pełne ściany,
-- częściowe przesunięcie suwaka pokazuje ściany częściowo,
-- otwarty widok pozwala oglądać wnętrze domu z większej perspektywy.
+W trybie **Symulacja** użyj **Play**, **Pause**, **1x**, **10x**, **60x** lub **600x**. Dostępne są szybkie przejścia do 06:00, 12:00, 18:00 i 00:00. **Space** uruchamia lub zatrzymuje symulację.
 
-## 5. Dodawanie urządzeń i mebli
+## 11. Monitor energii
 
-Po lewej stronie znajduje się lista elementów.
+Dolny monitor pokazuje m.in. zużycie teraz, produkcję PV, bilans netto, dzisiejsze zużycie, zużycie miesięczne, pobór z sieci, oddanie do sieci, cenę teraz, koszt dziś, miesiąca i roku, liczbę aktywnych urządzeń, CO2 oraz stan baterii. Panel można rozwinąć i zwinąć.
 
-Elementy są podzielone na kategorie.
+## 12. Dashboard
 
-Aby dodać element:
+Dashboard zawiera wykresy mocy, zużycia, kosztów, PV, przepływu z siecią i baterią. Ranking pokazuje urządzenie, moc, kWh/dzień, kWh/miesiąc, koszt i udział w zużyciu. Dodatkowe zakładki to **Efektywność**, **Energia**, **Statystyki**, **Ceny energii**, **Oszczędności**, **Scenariusze**, **Co jeśli?** i **Porównanie**.
 
-1. Wybierz kategorię.
-2. Znajdź urządzenie lub mebel.
-3. Dodaj go do sceny.
-4. Zaznacz dodany obiekt.
-5. Ustaw jego położenie i właściwości.
+## 13. Taryfy i ceny
 
-Aplikacja posiada dużą bibliotekę urządzeń oraz mebli.
+Obsługiwane są **G11, G12, G12w i G13**. Ceny mogą zależeć od godziny. Ma to wpływ na urządzenia, samochód elektryczny, baterię i harmonogramy.
 
-## 6. Zaznaczanie obiektu
+## 14. Plan dnia
 
-Kliknij obiekt w scenie 3D.
+**Plan dnia** służy do planowania pracy urządzeń i czynności zależnych od czasu. Pozwala sprawdzać wpływ godzin pracy na zużycie, koszty, PV i baterię.
 
-Po zaznaczeniu po prawej stronie pojawi się panel właściwości.
+## 15. Panele PV
 
-Można tam zmieniać informacje dotyczące obiektu, w tym jego ustawienia oraz stan pracy, jeśli dany obiekt jest urządzeniem.
+**Instalacja PV** służy do montażu paneli. Na produkcję wpływają godzina, data, słońce, pogoda, zachmurzenie, orientacja, nachylenie i zacienienie. Panele mogą być montowane na odpowiednich połaciach dachu.
 
-Urządzenie można również szybko włączyć lub wyłączyć przez podwójne kliknięcie.
+## 16. Zacienienie PV
 
-## 7. Przesuwanie, obracanie i skalowanie
+Produkcję mogą ograniczać budynki, ściany, dachy, drzewa, inne panele i inne przeszkody. Konstrukcja domu może więc bezpośrednio zmieniać produkcję PV.
 
-Narzędzia nad sceną pozwalają zmienić obiekt.
+## 17. Priorytet energii PV
 
-### Przesuwanie
+Można ustawić kolejność wykorzystania energii między **Domem**, **Baterią** i **Siecią**, np. **Dom → Bateria → Sieć** albo **Bateria → Dom → Sieć**. Wybrany priorytet zmienia przepływy energii.
 
-Wybierz **Move** albo użyj klawisza **W**.
+## 18. Magazyn energii
 
-Następnie przeciągaj uchwyty obiektu.
+Magazyn obsługuje poziom naładowania, rezerwę, maksymalną moc ładowania i rozładowania oraz pracę z taryfami. Przy taryfach z tańszymi godzinami może korzystać z tańszych okien. Przy taryfie płaskiej nie ma korzyści z samego przesuwania ładowania w czasie.
 
-### Obracanie
+## 19. Samochód elektryczny
 
-Wybierz **Rotate** albo użyj klawisza **E**.
+Ładowarka uwzględnia pojemność baterii, poziom naładowania, maksymalną moc, limit poboru domu, źródło energii i taryfę. Ładowanie jest ograniczane przez ustawiony limit poboru domu.
 
-### Skalowanie
+## 20. Instalacja elektryczna
 
-Wybierz **Scale** albo użyj klawisza **R**.
+Model obejmuje sieć, licznik, wyłącznik główny, rozdzielnicę, zabezpieczenia, obwody, przewody, gniazdka, listwy i urządzenia. System może wykrywać przeciążenia oraz problemy z połączeniami. Przewody są wizualizowane.
 
-### Pozostałe narzędzia
+## 21. Projektant domu
 
-- **Focus / F** - skupia widok na zaznaczonym obiekcie.
-- **Duplikuj / Ctrl+D** - tworzy kopię obiektu.
-- **Usuń / Delete** - usuwa zaznaczony obiekt.
+Projektant obsługuje poziomy, pomieszczenia, ściany, drzwi, okna, ścianki działowe, schody, dachy, balkony, tarasy i ogród. Konstrukcja wpływa na PV, cienie i instalację.
 
-## 8. Siatka i przyciąganie
+## 22. Smart Home i harmonogramy
 
-Podczas pracy można włączyć lub wyłączyć siatkę.
+Smart Home automatyzuje urządzenia na podstawie czasu, harmonogramów i warunków symulacji. Harmonogramy pozwalają np. uruchamiać komputer po południu, światło wieczorem albo ładować samochód w tańszej taryfie.
 
-Dostępne są ustawienia:
+## 23. Dom i utrzymanie
 
-- siatka,
-- przyciąganie do siatki,
-- odstęp siatki 0,1 m,
-- odstęp siatki 0,25 m,
-- odstęp siatki 0,5 m,
-- obrót co 15 stopni,
-- obrót co 30 stopni,
-- obrót co 45 stopni.
+Panel **Dom** obejmuje funkcje związane z mieszkańcami, utrzymaniem, scenariuszami i działaniem gospodarstwa.
 
-Siatka ułatwia równe ustawianie elementów.
+## 24. Modernizacje
 
-## 9. Widok kamery
+Panel **Modernizacje** pozwala instalować ulepszenia, np. energooszczędne oświetlenie, efektywniejsze urządzenia, modernizację klimatyzacji, rozbudowę PV i baterii. Ulepszenia mogą zmieniać zużycie, produkcję, pojemność lub koszty.
 
-Dostępne są podstawowe widoki:
+## 25. Audyt energetyczny
 
-- Home,
-- Top,
-- Front,
-- Left,
-- Right.
+**Audyt** analizuje zużycie, koszty, PV, wykorzystanie własnej energii, pobór z sieci, instalację i cele budżetowe. Część wyników wymaga pełnego dnia danych z symulacji.
 
-Pozwalają szybko przełączać perspektywę.
+## 26. Wyzwania
 
-## 10. Cykl dnia i nocy
+**Wyzwania** zawierają cele do wykonania podczas symulacji. Niektóre są ograniczone do konkretnych trybów. Przykładowo wyzwanie awarii sieci wymaga trybu Realistic i sprawdza działanie domu bez sieci.
 
-Pod sceną znajduje się suwak czasu.
+## 27. Raport
 
-Można ustawić godzinę od 00:00 do 24:00.
+**Raport** podsumowuje zapisane dane symulacji, m.in. całkowite zużycie, koszt, PV, pobór, oddanie do sieci, koszt ładowania EV i wynik efektywności.
 
-Zmiana godziny wpływa na wygląd sceny:
+## 28. Osiągnięcia
 
-- położenie słońca,
-- jasność,
-- cienie,
-- wygląd nieba,
-- widoczność gwiazd,
-- oświetlenie pomieszczeń,
-- działanie paneli PV.
+Osiągnięcia mogą dotyczyć niskiego zużycia, PV, maksymalnej mocy, działania podczas awarii, produkcji solarnej i bilansu energii. Postęp i punkty są zapisywane.
 
-Dzięki temu wygląd sceny jest powiązany z czasem symulacji.
+## 29. Zwierzak
 
-## 11. Tryb symulacji
+Zwierzak pokazuje porady, reaguje na symulację, wykonuje zadania i może zdobywać doświadczenie. Nazwę można ustawić przy pierwszym uruchomieniu. W trybie Edukacyjnym może pełnić funkcję przewodnika.
 
-Przełącz się z **Edycji** na **Symulację**.
+## 30. Zapis, import i eksport
 
-Pojawią się dodatkowe elementy sterowania czasem.
+**Zapisz** przechowuje projekt lokalnie, w tym pomieszczenia, poziomy, konstrukcję, urządzenia, PV, baterię, instalację, taryfy, harmonogramy, automatyzacje i ustawienia. Projekt można eksportować i importować jako JSON. Przed większymi zmianami warto wykonać kopię.
 
-### Przyciski
+## 31. Cofanie zmian
 
-- **Play** - uruchamia symulację.
-- **Pause** - zatrzymuje symulację.
-- **1x** - normalna prędkość.
-- **10x** - szybsza symulacja.
-- **60x** - bardzo szybka symulacja.
-- **600x** - maksymalne przyspieszenie.
+**Ctrl+Z** cofa zmianę, a **Ctrl+Y** ją ponawia. Historia zmian projektu nie cofa czasu przeprowadzonej symulacji.
 
-Można również przejść bezpośrednio do:
+## 32. Szybki start
 
-- 06:00,
-- 12:00,
-- 18:00,
-- 00:00.
+1. Wybierz tryb. 2. Wybierz pomieszczenie. 3. Dodaj meble i urządzenia. 4. Ustaw harmonogramy. 5. Wybierz taryfę. 6. Dodaj PV i baterię, jeśli są potrzebne. 7. Ustaw priorytet PV. 8. Uruchom symulację. 9. Sprawdź Dashboard. 10. Użyj Audytu i Raportu.
 
-## 12. Monitor energii
+## 33. Przykładowy scenariusz
 
-Na dole ekranu znajduje się monitor energii.
+W trybie Realistic dodaj komputer, monitor i lampę, ustaw ich harmonogram, zamontuj PV na dachu, sprawdź zacienienie, dodaj baterię, ustaw priorytet PV, uruchom symulację 60x, sprawdź Dashboard, Audyt i Raport, a następnie zmień harmonogram i porównaj wyniki.
 
-Pokazuje:
+## 34. Skróty
 
-- **Zużycie teraz** - aktualną moc pobieraną przez urządzenia.
-- **Produkcja PV** - aktualną produkcję paneli.
-- **Bilans netto** - różnicę pomiędzy produkcją a zużyciem.
-- **Dzisiaj** - energię zużytą w bieżącym dniu.
-- **Koszt netto dziś** - bieżący koszt netto.
-- **Koszt miesiąca** - szacowany koszt miesięczny.
-- **Koszt roku** - szacowany koszt roczny.
-- **Aktywne** - liczbę aktywnych urządzeń.
-- **CO2** - szacowaną emisję CO2.
-- **Magazyn energii** - stan baterii, jeśli magazyn jest używany.
+| Skrót | Działanie |\n|---|---|\n| W | Przesuwanie |\n| E | Obracanie |\n| R | Skalowanie |\n| F | Skupienie widoku |\n| G | Siatka |\n| Ctrl+Z | Cofnięcie |\n| Ctrl+Y | Ponowienie |\n| Ctrl+D | Duplikowanie |\n| Delete | Usunięcie |\n| Space | Start / pauza symulacji |
 
-## 13. Dashboard
+## 35. Rozwiązywanie problemów
 
-Otwórz **Dashboard** w górnym menu.
+**Obiekt jest w złym miejscu:** użyj Move, Grid i Snap. **Nie ma urządzenia:** sprawdź inne kategorie. **Symulacja nie działa:** wybierz Symulację i Play. **Koszt jest nieprawidłowy:** sprawdź taryfę, ceny, czas i pobór z sieci. **PV produkuje mało:** sprawdź godzinę, pogodę, sezon, orientację, nachylenie i cień. **Bateria nie ładuje się:** sprawdź SOC, rezerwę, moc, priorytet PV i produkcję. **EV ładuje się wolno:** sprawdź moc, limit domu, SOC, źródło, taryfę i harmonogram. **Audyt nie kończy się:** wykonaj pełny dzień symulacji. **Wyzwanie nie zalicza się:** sprawdź wymagany tryb. **Brak projektu:** sprawdź tę samą przeglądarkę albo użyj JSON.
 
-Dashboard zawiera kilka sekcji.
+## 36. Najważniejsze części
 
-### Wykresy
+Projektowanie domu, urządzenia, symulacja, energia, PV, magazyn energii, instalacja elektryczna, Smart Home, Dashboard, Projektant, Plan dnia, Modernizacje, Audyt, Wyzwania, Raport, Osiągnięcia, Zwierzak, tryby Arcade/Realistic/Edukacyjny oraz zapis projektu.
 
-Pokazują między innymi:
+## 37. Cel aplikacji
 
-- moc w czasie,
-- zużycie według godzin,
-- zużycie według urządzeń,
-- koszty w czasie,
-- porównania dni,
-- dane tygodniowe,
-- dane miesięczne.
-
-### Ranking urządzeń
-
-Pozwala sprawdzić:
-
-- urządzenie,
-- moc,
-- zużycie na dzień,
-- zużycie na miesiąc,
-- koszt miesięczny,
-- udział urządzenia w całym zużyciu.
-
-### Efektywność
-
-Pokazuje informacje pomagające ocenić sposób wykorzystania energii.
-
-### Energia
-
-Sekcja dotycząca produkcji i wykorzystania energii z paneli PV oraz magazynu energii.
-
-### Statystyki
-
-Pozwalają analizować dane z różnych okresów.
-
-### Oszczędności
-
-Pokazują potencjalne oszczędności wynikające ze zmiany sposobu korzystania z urządzeń.
-
-### Scenariusze
-
-Pozwalają porównywać różne warianty działania domu.
-
-### Co jeśli?
-
-Służy do sprawdzania, jak zmiana wybranych ustawień może wpłynąć na zużycie i koszty.
-
-### Porównanie
-
-Pozwala zestawić wybrane warianty ze sobą.
-
-## 14. Panele fotowoltaiczne
-
-Przycisk **Instalacja PV** uruchamia tryb ustawiania paneli.
-
-Panele mogą produkować energię zależnie od:
-
-- godziny,
-- daty,
-- położenia słońca,
-- pogody,
-- zachmurzenia,
-- zacienienia,
-- ustawienia panelu.
-
-Dostępne są również ustawienia dotyczące wykorzystania wyprodukowanej energii.
-
-## 15. Kolejność wykorzystania energii PV
-
-Aplikacja pozwala określić kolejność wykorzystania energii.
-
-Można ustawić trzy miejsca:
-
-1. dom,
-2. magazyn energii,
-3. sieć energetyczna.
-
-Kolejność można zmieniać w ustawieniach.
-
-Przykładowo energia może być najpierw wykorzystana przez urządzenia domu, następnie skierowana do baterii, a nadwyżka przekazana do sieci.
-
-## 16. Magazyn energii
-
-Magazyn energii może przechowywać nadwyżkę energii z paneli.
-
-W ustawieniach można uwzględnić między innymi:
-
-- poziom naładowania,
-- minimalny poziom rezerwy,
-- wykorzystanie energii w domu,
-- ładowanie magazynu,
-- oddawanie energii do sieci.
-
-Stan magazynu jest widoczny w monitorze energii, gdy magazyn znajduje się w projekcie.
-
-## 17. Taryfy energii
-
-Aplikacja obsługuje taryfy:
-
-- G11,
-- G12,
-- G12w,
-- G13.
-
-Każda taryfa może mieć własne ceny oraz harmonogram godzin.
-
-Oznacza to, że koszt urządzenia może zależeć nie tylko od jego zużycia, ale również od godziny pracy.
-
-## 18. Instalacja elektryczna
-
-Przycisk **Instalacja** otwiera konfigurację instalacji elektrycznej.
-
-Można tworzyć elementy takie jak:
-
-- rozdzielnica,
-- obwody,
-- gniazdka,
-- listwy zasilające,
-- liczniki,
-- zabezpieczenia,
-- przewody,
-- połączenia urządzeń.
-
-Urządzenia mogą być przypisane do odpowiednich obwodów.
-
-System może również wykrywać problemy związane z przeciążeniem lub konfiguracją instalacji.
-
-## 19. Projektant domu
-
-Przycisk **Projektant** pozwala rozbudować konstrukcję domu.
-
-Można pracować z:
-
-- poziomami,
-- pomieszczeniami,
-- ścianami,
-- drzwiami,
-- oknami,
-- ściankami działowymi,
-- schodami,
-- dachami,
-- balkonami,
-- tarasami,
-- ogrodem.
-
-Projektant pozwala przygotować bardziej rozbudowany model domu zamiast korzystania tylko z gotowego układu pomieszczeń.
-
-## 20. Smart Home
-
-Panel **Smart Home** służy do automatyzacji urządzeń.
-
-Automatyzacja może sterować urządzeniami na podstawie ustalonych warunków i harmonogramów.
-
-Przykładowo można ustawić pracę urządzenia tylko w określonych godzinach.
-
-## 21. Harmonogramy urządzeń
-
-Wybrane urządzenia mogą mieć własny harmonogram.
-
-Harmonogram określa, kiedy urządzenie ma pracować.
-
-Można dzięki temu symulować rzeczywiste zachowanie domu, np. urządzenie pracujące tylko rano lub wieczorem.
-
-## 22. Pogoda
-
-Symulacja uwzględnia warunki pogodowe.
-
-Pogoda może wpływać na:
-
-- wygląd nieba,
-- światło,
-- produkcję PV,
-- zacienienie,
-- warunki pracy instalacji.
-
-Aktualny stan pogody może być widoczny jako oznaczenie w interfejsie.
-
-## 23. Zwierzak sieciowy
-
-W prawym dolnym obszarze sceny znajduje się zwierzak sieciowy.
-
-Jest to pomocniczy element aplikacji.
-
-Może:
-
-- pokazywać porady,
-- reagować na postęp użytkownika,
-- wykonywać zadania,
-- zdobywać doświadczenie,
-- odblokowywać elementy,
-- informować o możliwościach oszczędzania energii.
-
-Można zmienić jego nazwę.
-
-## 24. Zapisywanie projektu
-
-Kliknij przycisk **Zapisz**.
-
-Projekt jest zapisywany lokalnie na używanym urządzeniu.
-
-Zapisywane są między innymi:
-
-- pomieszczenia,
-- obiekty,
-- ich położenie,
-- urządzenia,
-- meble,
-- panele PV,
-- magazyny energii,
-- ustawienia energii,
-- taryfy,
-- harmonogramy,
-- automatyzacje,
-- instalacja elektryczna,
-- postęp symulacji.
-
-## 25. Eksport i import projektu
-
-Projekt można zapisać również jako plik JSON.
-
-Plik może zawierać cały projekt wraz z ustawieniami i postępem symulacji.
-
-Dzięki temu projekt można przenieść na inne urządzenie.
-
-Przy imporcie aplikacja odczytuje zapisane dane i odtwarza projekt.
-
-## 26. Cofanie zmian
-
-Przycisk **Cofnij** lub skrót **Ctrl+Z** cofa ostatnią zmianę projektu.
-
-Przycisk **Ponów** lub skrót **Ctrl+Y** przywraca cofniętą zmianę.
-
-Historia zmian dotyczy zmian projektu, a nie cofania czasu samej symulacji.
-
-## 27. Najprostszy sposób rozpoczęcia pracy
-
-Jeżeli uruchamiasz aplikację pierwszy raz:
-
-1. Zostań w trybie **Edycja**.
-2. Wybierz pomieszczenie.
-3. Dodaj kilka mebli.
-4. Dodaj urządzenia elektryczne.
-5. Ustaw urządzenia w odpowiednich miejscach.
-6. Włącz wybrane urządzenia.
-7. Ustaw taryfę energii.
-8. Opcjonalnie dodaj panele PV.
-9. Opcjonalnie dodaj magazyn energii.
-10. Otwórz **Dashboard**.
-11. Przełącz się na **Symulację**.
-12. Uruchom symulację przyciskiem Play.
-13. Obserwuj zużycie, produkcję PV i koszty.
-14. Zmieniaj ustawienia i sprawdzaj różnice.
-
-## 28. Przykładowy scenariusz
-
-Aby sprawdzić działanie aplikacji:
-
-1. Utwórz pokój.
-2. Dodaj komputer, monitor i lampę.
-3. Ustaw ich położenie.
-4. Włącz urządzenia.
-5. Ustaw ich harmonogram.
-6. Dodaj panel PV.
-7. Ustaw kolejność wykorzystania energii.
-8. Przejdź do trybu Symulacja.
-9. Uruchom symulację z prędkością 60x.
-10. Otwórz Dashboard.
-11. Sprawdź wykresy i ranking urządzeń.
-12. Zmień godziny pracy urządzeń.
-13. Uruchom symulację ponownie.
-14. Porównaj koszty.
-
-## 29. Przydatne skróty
-
-| Skrót | Działanie |
-|---|---|
-| W | Przesuwanie obiektu |
-| E | Obracanie obiektu |
-| R | Skalowanie obiektu |
-| F | Skupienie widoku na obiekcie |
-| G | Siatka |
-| Ctrl+Z | Cofnięcie zmiany |
-| Ctrl+Y | Ponowienie zmiany |
-| Ctrl+D | Duplikowanie obiektu |
-| Delete | Usunięcie obiektu |
-| Space | Start / pauza symulacji |
-
-## 30. Wskazówki
-
-- Najpierw zaprojektuj pomieszczenia, a dopiero później ustawiaj urządzenia.
-- Korzystaj z siatki, gdy chcesz dokładnie ustawiać obiekty.
-- Używaj harmonogramów, aby symulacja bardziej przypominała rzeczywiste korzystanie z domu.
-- Dashboard najlepiej otwierać po przeprowadzeniu dłuższej symulacji.
-- Przy analizie kosztów sprawdzaj również wybraną taryfę.
-- Przy panelach PV zwracaj uwagę na godzinę, pogodę i zacienienie.
-- Regularnie zapisuj projekt.
-- Eksport JSON warto wykonać przed większymi zmianami projektu.
-
-## 31. Rozwiązywanie problemów
-
-### Obiekt jest w złym miejscu
-
-Zaznacz go i użyj narzędzia Move. Możesz również włączyć siatkę i Snap.
-
-### Nie można znaleźć urządzenia
-
-Sprawdź inne kategorie w panelu po lewej stronie.
-
-### Symulacja nie działa
-
-Sprawdź, czy jesteś w trybie **Symulacja**, a następnie kliknij Play.
-
-### Koszt energii jest nieprawidłowy
-
-Sprawdź wybraną taryfę, ceny oraz harmonogram taryfy.
-
-### Panel PV produkuje mało energii
-
-Sprawdź godzinę, datę, pogodę, położenie panelu oraz zacienienie.
-
-### Nie ma zapisanego projektu
-
-Sprawdź, czy projekt został wcześniej zapisany na tym samym urządzeniu i w tej samej przeglądarce.
-
-### Chcesz wrócić do poprzedniego ustawienia
-
-Użyj **Cofnij** lub Ctrl+Z.
-
-## 32. Najważniejsze elementy aplikacji
-
-EnergyRoom 3D można podzielić na kilka głównych części:
-
-1. **Projektowanie domu** - pomieszczenia, ściany, drzwi, okna i wyposażenie.
-2. **Urządzenia** - sprzęt elektryczny i jego parametry.
-3. **Symulacja** - działanie domu w czasie.
-4. **Energia** - zużycie, produkcja PV, magazynowanie i bilans.
-5. **Instalacja elektryczna** - obwody, gniazdka, przewody i zabezpieczenia.
-6. **Smart Home** - automatyzacja urządzeń.
-7. **Dashboard** - wykresy, koszty, statystyki i porównania.
-8. **Projektant** - rozbudowa konstrukcji domu.
-9. **Zwierzak sieciowy** - porady, zadania i element grywalizacji.
-10. **Zapisywanie projektu** - zapis lokalny oraz eksport i import danych.
-
-## 33. Cel aplikacji
-
-Celem EnergyRoom 3D jest pokazanie w prosty i interaktywny sposób, jak wygląd domu, urządzenia, ich harmonogramy, taryfa energii, fotowoltaika, magazyn energii oraz instalacja elektryczna wpływają na zużycie energii i koszty.
+EnergyRoom 3D łączy projektowanie domu z symulacją energetyczną. Pozwala sprawdzać, jak urządzenia, harmonogramy, pogoda, taryfa, PV, bateria, instalacja elektryczna i konstrukcja domu wpływają na zużycie energii i koszty.
 
