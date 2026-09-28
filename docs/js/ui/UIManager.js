@@ -578,12 +578,24 @@ class UIManager {
     const slopeKey = (room.design.roof.type==='gable' && room.design.roof.pvSlope==='b') ? 'b' : 'a';
     const roof = this.roomBuilder.roofGroups[slopeKey==='b' ? room.id+'#b' : room.id];
     if (!roof){ this.toast(I18n.t('msg.noSlopedRoof')); return; }
-    const existing = this.objectManager.getSolar(room.id).filter(p=>(p.slope||'a')===slopeKey).length;
+    const existingPanels = this.objectManager.getSolar(room.id).filter(p=>(p.slope||'a')===slopeKey);
     const cols = Math.max(1, Math.floor((roof.userData.span.w) / 1.06));
-    const col = existing % cols, row = Math.floor(existing / cols);
     const panelW=1.0, panelL=1.65, gap=0.06;
     const spanW = cols*panelW + (cols-1)*gap;
     const startX = -spanW/2 + panelW/2, startZ = -roof.userData.span.l/2 + panelL/2 + 0.05;
+    // Find the first free (col, row) slot by the panels actually sitting on this slope, not just their
+    // count - a slot freed by deleting a panel from the middle must not be re-claimed by whatever panel
+    // happens to be added next, or the new one lands right on top of a panel that never moved.
+    const occupied = new Set(existingPanels.map(p => {
+      const col = Math.round((p.position.x - startX) / (panelW + gap));
+      const row = Math.round((p.position.z - startZ) / (panelL + gap));
+      return col + ',' + row;
+    }));
+    let col = 0, row = 0;
+    for (let idx = 0; ; idx++){
+      col = idx % cols; row = Math.floor(idx / cols);
+      if (!occupied.has(col + ',' + row)) break;
+    }
     const lx = startX + col*(panelW+gap), lz = startZ + row*(panelL+gap);
     // ObjectManager auto-parents solar panels to this room's roof group (see getRoofGroup hook
     // in main.js), so a plain addSolar with roof-local x/z is all that's needed here.

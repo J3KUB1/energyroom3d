@@ -100,7 +100,7 @@ const I18N_DICT = {
     // ---------- topbar / navigation ----------
     'mode.edit':'Edycja', 'mode.sim':'Symulacja',
     'nav.undo':'Cofnij', 'nav.redo':'Ponów', 'nav.save':'Zapisz projekt', 'nav.load':'Wczytaj projekt',
-    'nav.roomSettings':'Pokój', 'nav.smartHome':'Smart Home', 'nav.dashboard':'Dashboard', 'nav.settings':'Ustawienia',
+    'nav.roomSettings':'Pokój', 'nav.smartHome':'Smart Home', 'nav.dashboard':'Panel', 'nav.settings':'Ustawienia',
     'nav.newSim':'Nowa symulacja', 'nav.wholeHouse':'Cały dom', 'nav.wallsOpen':'Otwarty', 'nav.wallsClosed':'Zamknięty',
 
     // ---------- days / months ----------
@@ -331,7 +331,7 @@ const I18N_DICT = {
     "ui.tip.debugLog":"Dziennik zdarzeń",
     "ui.tip.playPause":"Odtwórz / Pauza (Spacja)",
     "ui.nav.room":"Pokój",
-    "ui.nav.dashboard":"Dashboard",
+    "ui.nav.dashboard":"Panel",
     "ui.panel.assets":"Assety",
     "ui.panel.properties":"Właściwości",
     "ui.gizmo.move":"Move",
@@ -386,7 +386,7 @@ const I18N_DICT = {
     "landing.f1.h":"Dom, jaki potrzebujesz",
     "landing.f2.h":"Realne zużycie, nie zgadywanie",
     "landing.f3.h":"Słońce i magazyny energii",
-    "landing.f4.h":"Dashboard, który tłumaczy koszty",
+    "landing.f4.h":"Panel, który tłumaczy koszty",
     "landing.f5.h":"Zwierzak sieciowy",
     "landing.f1.p":"Sypialnia, kuchnia, łazienka, salon, biuro czy garaż — dodajesz i usuwasz pokoje, a każdy ma własne wymiary, podłogę i ściany.",
     "landing.f2.p":"Każde urządzenie ma prawdziwy profil pracy — lodówka cyklicznie załącza sprężarkę, bojler grzeje i podtrzymuje, czajnik pracuje krótko, ale mocno.",

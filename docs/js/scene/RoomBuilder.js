@@ -361,6 +361,29 @@ class RoomBuilder {
       slope.userData.surfaceY = 0.035; slope.userData.span = { w:sl.spanW, l:sl.spanL }; slope.userData.slopeKey = sl.key; slope.userData.azimuthDeg = sl.azimuthDeg;
       this.roofGroups[sl.key === 'a' ? room.id : room.id + '#b'] = slope;
     }
+    if (d.type === 'mono' && slopes.length){
+      // Close the volume under a shed roof: the two side walls become trapezoids that follow the slope and the
+      // high wall is raised up to the roof's high edge (otherwise there is an open wedge under the slab).
+      const sl = slopes[0], p = sl.pitch, ov = d.overhang, T = CONSTRUCTION.wallThicknessVisualM;
+      const across = sl.across - ov * 2, along = (sl.len - ov * 2) * Math.cos(p), eaveY = H + 0.05;
+      // underside of the slab at local z (z = +along/2 is the low edge, -along/2 the high edge)
+      const top = z => Math.max(H + 0.02, eaveY + (along / 2 + ov * Math.cos(p) - z) * Math.tan(p) - 0.05);
+      const yawG = new THREE.Group(); yawG.position.set(W / 2, 0, L / 2); yawG.rotation.y = sl.yaw; g.add(yawG);
+      const shape = new THREE.Shape();
+      shape.moveTo(along / 2, H); shape.lineTo(-along / 2, H); shape.lineTo(-along / 2, top(-along / 2)); shape.lineTo(along / 2, top(along / 2)); shape.closePath();
+      for (const sx of [-1, 1]){
+        const side = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth:T, bevelEnabled:false }), wallMat);
+        side.rotation.y = -Math.PI / 2;                       // shape x -> local +Z, extrusion -> local -X
+        side.position.set(sx > 0 ? across / 2 : -across / 2 + T, 0, 0);
+        side.castShadow = true; side.receiveShadow = true; yawG.add(side); this.fadable.push(side);
+      }
+      const hh = top(-along / 2) - H;
+      if (hh > 0.02){
+        const high = new THREE.Mesh(new THREE.BoxGeometry(across, hh, T), wallMat);
+        high.position.set(0, H + hh / 2, -along / 2 + T / 2);
+        high.castShadow = true; high.receiveShadow = true; yawG.add(high); this.fadable.push(high);
+      }
+    }
     if (d.type === 'gable'){
       const p = d.pitchDeg * Math.PI / 180, alongIsL = (d.facing === 'S' || d.facing === 'N'), span = alongIsL ? L : W, rise = (span / 2) * Math.tan(p);
       const shape = new THREE.Shape(); shape.moveTo(-span / 2, 0); shape.lineTo(span / 2, 0); shape.lineTo(0, rise); shape.closePath();

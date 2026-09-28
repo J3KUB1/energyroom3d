@@ -348,7 +348,11 @@ const BuildingModel = {
     const eaveY = H + 0.05;
     if (r.type === 'mono'){
       const len = along / Math.cos(p) + ov * 2;
-      return [{ key:'a', yaw, dz:0, y:eaveY, pitch:p, across:across + ov * 2, len, azimuthDeg:this._az(r.facing), areaM2:(across + ov*2) * len, spanW:across + ov*1.2, spanL:len - ov*1.2 }];
+      // The slab is rotated about its own centre, so the centre must sit half the rise ABOVE eaveY for
+      // the low (+Z) edge to land back at eaveY - otherwise the low edge sinks below the wall top and the
+      // high edge overshoots by the same amount, which is what let the roof punch through neighbouring rooms.
+      const y = eaveY + (len / 2) * Math.sin(p);
+      return [{ key:'a', yaw, dz:0, y, pitch:p, across:across + ov * 2, len, azimuthDeg:this._az(r.facing), areaM2:(across + ov*2) * len, spanW:across + ov*1.2, spanL:len - ov*1.2 }];
     }
     const half = along / 2, len = half / Math.cos(p) + ov + 0.05;
     const dz = half / 2 + ov * Math.cos(p) / 2, y = eaveY + (half / 2) * Math.tan(p) - ov * Math.sin(p) / 2 * 0;
