@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnergyRoom 3D — zaprojektuj dom i policz jego rachunek za prąd</title>
+<meta name="description" content="Interaktywny symulator 3D domu: rozstawiasz meble, urządzenia AGD, panele PV i magazyny energii, a aplikacja liczy realne zużycie prądu i koszty.">
+<meta name="theme-color" content="#0d121a">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#07090d;
+    --bg-raised: rgba(255,255,255,0.05);
+    --border: rgba(255,255,255,0.09);
+    --text-1:#eef2f7;
+    --text-2:#98a5b8;
+    --text-3:#69758a;
+    --accent-power:#ffb648;
+    --accent-data:#4fd1c5;
+    --accent-good:#3ee79b;
+    --font-display:'Space Grotesk','Inter',sans-serif;
+    --font-body:'Inter',sans-serif;
+    --font-mono:'JetBrains Mono',monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(1000px 640px at 12% -8%, rgba(79,209,197,0.10) 0%, transparent 60%),
+      radial-gradient(900px 620px at 92% 4%, rgba(255,182,72,0.08) 0%, transparent 55%),
+      linear-gradient(180deg, #0b0e14 0%, var(--bg-deep) 100%) fixed;
+    color:var(--text-1);
+    font-family:var(--font-body);
+    letter-spacing:-0.005em;
+    min-height:100vh;
+  }
+  a{ color:inherit; }
+  ::selection{ background:rgba(79,209,197,0.3); }
+
+  .page{ max-width:1180px; margin:0 auto; padding:28px 28px 72px; }
+
+  .brand{ display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-weight:700; font-size:16px; margin-bottom:72px; }
+  .brand-mark{
+    color:var(--accent-power); display:inline-flex; width:28px; height:28px; align-items:center; justify-content:center;
+    background:linear-gradient(145deg, rgba(255,182,72,0.18), rgba(255,182,72,0.03));
+    border-radius:8px; border:1px solid rgba(255,182,72,0.25);
+  }
+  .brand-3d{ color:var(--accent-data); margin-left:1px; }
+
+  .hero{ display:grid; grid-template-columns:minmax(0,1.1fr) minmax(320px,.9fr); gap:64px; align-items:center; opacity:0; transform:translateY(10px); animation: rise .7s cubic-bezier(.2,.7,.2,1) forwards; }
+  @keyframes rise{ to{ opacity:1; transform:translateY(0); } }
+
+  h1{
+    font-family:var(--font-display); font-weight:700;
+    font-size:clamp(2rem, 5.4vw, 3.1rem); line-height:1.14; letter-spacing:-0.015em;
+    margin:0 0 20px;
+    max-width:16ch;
+  }
+  .lede{ font-size:17px; line-height:1.65; color:var(--text-2); max-width:52ch; margin:0 0 32px; }
+
+  .cta{
+    display:inline-block; text-decoration:none;
+    background:linear-gradient(180deg, var(--accent-data), #2fb3a6); color:#062420;
+    border:none; border-radius:10px; padding:14px 26px; font-weight:700; font-size:15px;
+    font-family:var(--font-display);
+    box-shadow:0 10px 26px rgba(79,209,197,0.25); transition:.15s;
+  }
+  .cta:hover{ filter:brightness(1.07); transform:translateY(-1px); }
+  .cta:focus-visible{ outline:2px solid var(--accent-data); outline-offset:3px; }
+
+  .readout{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin:44px 0 8px; padding:1px; border:1px solid var(--border); border-radius:14px; background:var(--border); overflow:hidden; }
+  .stat{ min-width:96px; padding:15px 14px; background:rgba(7,9,13,.74); }
+  .stat .num{ display:block; font-family:var(--font-mono); font-weight:500; font-size:26px; color:var(--accent-data); }
+  .stat .label{ display:block; font-size:12.5px; color:var(--text-3); margin-top:2px; }
+
+  .features{ margin-top:82px; display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .row{ display:flex; gap:14px; padding:22px; min-height:150px; border:1px solid var(--border); border-radius:16px; background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.018)); transition:.2s; }
+  .row:hover{ border-color:rgba(79,209,197,.35); transform:translateY(-3px); }
+  .glyph{ font-size:20px; line-height:1.4; flex:0 0 auto; width:28px; }
+  .row h3{ font-family:var(--font-display); font-size:15.5px; font-weight:600; margin:0 0 5px; }
+  .row p{ font-size:14px; line-height:1.55; color:var(--text-2); margin:0; max-width:56ch; }
+
+  .preview{ position:relative; min-height:380px; padding:22px; border:1px solid rgba(79,209,197,.25); border-radius:24px; background:linear-gradient(145deg,rgba(79,209,197,.12),rgba(255,182,72,.05) 48%,rgba(255,255,255,.025)); box-shadow:0 28px 70px rgba(0,0,0,.32); overflow:hidden; }
+  .preview:after{ content:''; position:absolute; width:260px; height:260px; right:-90px; top:-110px; border-radius:50%; background:rgba(79,209,197,.2); filter:blur(2px); }
+  .preview-head{ display:flex; justify-content:space-between; align-items:center; color:var(--text-2); font-size:12px; position:relative; z-index:1; }
+  .live{ color:var(--accent-good); display:flex; align-items:center; gap:6px; }.live:before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 12px currentColor}
+  .house-card{ position:relative; z-index:1; margin-top:34px; padding:24px; border:1px solid rgba(255,255,255,.13); border-radius:18px; background:rgba(5,8,13,.56); }
+  .house-sun{ font-size:48px; filter:drop-shadow(0 0 20px rgba(255,182,72,.45)); }.house-card h2{margin:10px 0 6px;font-family:var(--font-display);font-size:25px}.house-card p{margin:0;color:var(--text-2);line-height:1.55;font-size:13px}
+  .flow{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:30px; color:var(--text-2); font-size:12px; }.flow b{color:var(--accent-data);font-size:18px}.flow span{display:grid;gap:5px;text-align:center}.flow strong{color:var(--text-1);font-family:var(--font-mono);font-size:13px}
+  .section-kicker{ margin:0 0 14px; color:var(--accent-data); font:600 12px var(--font-mono); text-transform:uppercase; letter-spacing:.12em; }
+  .modes{ margin-top:78px; display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }.mode-card{padding:22px;border:1px solid var(--border);border-radius:16px;background:rgba(255,255,255,.035)}.mode-card h3{margin:0 0 8px;font-family:var(--font-display)}.mode-card p{margin:0;color:var(--text-2);font-size:13px;line-height:1.55}.mode-dot{font-size:24px;display:block;margin-bottom:14px}
+  .steps{margin-top:78px;padding:28px;border:1px solid var(--border);border-radius:18px;background:rgba(255,255,255,.025)}.step-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.step{display:flex;gap:12px}.step-no{display:grid;place-items:center;flex:0 0 30px;height:30px;border-radius:50%;background:rgba(79,209,197,.18);color:var(--accent-data);font-weight:700}.step h3{margin:2px 0 5px;font-size:14px}.step p{margin:0;color:var(--text-2);font-size:12px;line-height:1.5}
+  footer{ margin-top:56px; font-size:12.5px; color:var(--text-3); line-height:1.6; border-top:1px solid var(--border); padding-top:24px; }
+  .legal-link{display:inline-block;margin-left:18px;color:var(--text-2);text-decoration:none;border-bottom:1px solid rgba(79,209,197,.35)}.legal-link:hover{color:var(--accent-data)}
+
+  @media (max-width:560px){
+    .page{ padding:24px 18px 48px; }.hero{grid-template-columns:1fr;gap:34px}.features,.modes,.step-grid{grid-template-columns:1fr}.preview{min-height:320px}.brand{margin-bottom:48px}.readout{grid-template-columns:repeat(2,1fr)}
+    .brand{ margin-bottom:40px; }
+    .readout{ gap:22px 28px; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .hero{ opacity:1; transform:none; animation:none; }
+    .cta{ transition:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="brand"><span class="brand-mark">⚡</span><span>EnergyRoom<span class="brand-3d">3D</span></span>
+    <span class="lang-switch" style="margin-left:auto;display:inline-flex;gap:6px">
+      <button type="button" data-lang="pl" style="cursor:pointer;background:transparent;color:inherit;border:1px solid currentColor;border-radius:6px;padding:2px 8px">PL</button>
+      <button type="button" data-lang="en" style="cursor:pointer;background:transparent;color:inherit;border:1px solid currentColor;border-radius:6px;padding:2px 8px">EN</button>
+    </span></div>
+
+  <div class="hero">
+    <h1 data-i18n="landing.h1">Rozstaw meble. Podłącz urządzenia. Zobacz rachunek.</h1>
+    <p class="lede" data-i18n="landing.lede">EnergyRoom 3D to interaktywny model domu w przeglądarce. Meblujesz pokoje, podłączasz sprzęt AGD i RTV, montujesz panele fotowoltaiczne — a symulacja liczy, ile to naprawdę kosztuje w ciągu dnia, tygodnia czy roku.</p>
+    <a class="cta" href="app.html" data-i18n="landing.cta">Wejdź do symulatora</a>
+
+    <div class="readout">
+      <div class="stat"><span class="num" data-to="73">0</span><span class="label" data-i18n="landing.stat.devices">urządzeń</span></div>
+      <div class="stat"><span class="num" data-to="52">0</span><span class="label" data-i18n="landing.stat.furniture">mebli</span></div>
+      <div class="stat"><span class="num" data-to="6">0</span><span class="label" data-i18n="landing.stat.rooms">typów pokoi</span></div>
+      <div class="stat"><span class="num" data-to="3">0</span><span class="label" data-i18n="landing.stat.pv">panele PV</span></div>
+      <div class="stat"><span class="num" data-to="3">0</span><span class="label" data-i18n="landing.stat.battery">magazyny energii</span></div>
+    </div>
+    <div class="preview" aria-label="Podgląd symulacji">
+      <div class="preview-head"><span data-i18n="landing.preview.label">PODGLĄD SYMULACJI</span><span class="live" data-i18n="landing.preview.live">DANE NA ŻYWO</span></div>
+      <div class="house-card"><span class="house-sun">☀️</span><h2 data-i18n="landing.preview.title">Twój dom. Twoja energia.</h2><p data-i18n="landing.preview.copy">Zobacz, jak pogoda, taryfa, PV, bateria i urządzenia wpływają na rachunek w tej samej chwili.</p><div class="flow"><span>☀<strong>2.4 kW</strong><small>PV</small></span><b>→</b><span>🏠<strong>1.1 kW</strong><small>DOM</small></span><b>→</b><span>🔋<strong>78%</strong><small>MAGAZYN</small></span></div></div>
+    </div>
+  </div>
+
+  <section class="modes"><div style="grid-column:1/-1"><p class="section-kicker" data-i18n="landing.modes.kicker">WYBIERZ SPOSÓB ZABAWY</p></div>
+    <article class="mode-card"><span class="mode-dot">⚡</span><h3 data-i18n="landing.mode.arcade.h">Arcade</h3><p data-i18n="landing.mode.arcade.p">Szybkie decyzje, prostsze obliczenia i natychmiastowy podgląd efektu.</p></article>
+    <article class="mode-card"><span class="mode-dot">🔎</span><h3 data-i18n="landing.mode.realistic.h">Realistic</h3><p data-i18n="landing.mode.realistic.p">Taryfy, ograniczenia instalacji, pogoda, sezony, bateria, EV i awarie.</p></article>
+    <article class="mode-card"><span class="mode-dot">🌱</span><h3 data-i18n="landing.mode.kids.h">Edukacyjny</h3><p data-i18n="landing.mode.kids.p">Ciekawostki, podpowiedzi i proste wyjaśnienia dla młodszych odkrywców.</p></article>
+  </section>
+
+  <div class="features">
+    <div style="grid-column:1/-1"><p class="section-kicker" data-i18n="landing.features.kicker">CO MOŻESZ ZROBIĆ</p></div>
+    <div class="row">
+      <div class="glyph">🏠</div>
+      <div><h3 data-i18n="landing.f1.h">Dom, jaki potrzebujesz</h3><p data-i18n="landing.f1.p">Sypialnia, kuchnia, łazienka, salon, biuro czy garaż — dodajesz i usuwasz pokoje, a każdy ma własne wymiary, podłogę i ściany.</p></div>
+    </div>
+    <div class="row">
+      <div class="glyph">🔌</div>
+      <div><h3 data-i18n="landing.f2.h">Realne zużycie, nie zgadywanie</h3><p data-i18n="landing.f2.p">Każde urządzenie ma prawdziwy profil pracy — lodówka cyklicznie załącza sprężarkę, bojler grzeje i podtrzymuje, czajnik pracuje krótko, ale mocno.</p></div>
+    </div>
+    <div class="row">
+      <div class="glyph">☀</div>
+      <div><h3 data-i18n="landing.f3.h">Słońce i magazyny energii</h3><p data-i18n="landing.f3.p">Panele PV na dachu garażu produkują prąd zależnie od pory dnia, daty, pogody i cienia — a bateria domowa pokrywa nim wieczorne szczyty zużycia.</p></div>
+    </div>
+    <div class="row">
+      <div class="glyph">📊</div>
+      <div><h3 data-i18n="landing.f4.h">Dashboard, który tłumaczy koszty</h3><p data-i18n="landing.f4.p">Ranking najbardziej prądożernych urządzeń, scenariusze „co jeśli”, porównania i pełny rozkład rachunku — nie tylko jedna liczba na końcu.</p></div>
+    </div>
+    <div class="row">
+      <div class="glyph">🐾</div>
+      <div><h3 data-i18n="landing.f5.h">Zwierzak sieciowy</h3><p data-i18n="landing.f5.p">Żyje z ruchu danych Twoich urządzeń i podpowiada, jak zarządzać energią w domu.</p></div>
+    </div>
+  </div>
+
+  <section class="steps"><p class="section-kicker" data-i18n="landing.steps.kicker">START W TRZECH KROKACH</p><div class="step-grid">
+    <div class="step"><span class="step-no">1</span><div><h3 data-i18n="landing.step1.h">Zaprojektuj dom</h3><p data-i18n="landing.step1.p">Dodaj pokoje, garaż, ogród i wyposażenie.</p></div></div>
+    <div class="step"><span class="step-no">2</span><div><h3 data-i18n="landing.step2.h">Uruchom symulację</h3><p data-i18n="landing.step2.p">Ustaw taryfę, pogodę, PV, baterię i harmonogramy.</p></div></div>
+    <div class="step"><span class="step-no">3</span><div><h3 data-i18n="landing.step3.h">Podejmuj decyzje</h3><p data-i18n="landing.step3.p">Obserwuj koszty, osiągnięcia i raport końcowy.</p></div></div>
+  </div></section>
+
+  <footer><span data-i18n="landing.footer">Działa w całości lokalnie w przeglądarce — projekt zapisuje się na tym urządzeniu, bez konta i bez serwera.</span><a class="legal-link" href="legal.html" data-i18n="legal.link">Informacje prawne</a></footer>
+</div>
+
+<script src="js/i18n/dictionary.js"></script>
+<script src="js/i18n/catalog_en.js"></script>
+<script src="js/i18n/I18n.js"></script>
+<script>
+  I18n.init();
+  document.title = I18n.t('landing.title');
+  document.querySelectorAll('.lang-switch button').forEach(b=>b.addEventListener('click',()=>{ I18n.setLang(b.dataset.lang); document.title = I18n.t('landing.title'); }));
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.querySelectorAll('.num').forEach(el=>{
+    const to = Number(el.dataset.to);
+    if (prefersReduced){ el.textContent = to; return; }
+    const start = performance.now(), dur = 900;
+    function tick(now){
+      const t = Math.min(1, (now-start)/dur);
+      const eased = 1 - Math.pow(1-t, 3);
+      el.textContent = Math.round(eased*to);
+      if (t<1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+</script>
+</body>
+</html>
