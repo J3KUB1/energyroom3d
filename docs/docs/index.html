@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EnergyRoom 3D — dokumentacja</title>
+  <meta name="description" content="Dokumentacja projektu EnergyRoom 3D: szybki start, architektura, etapy rozwoju i przewodnik użytkownika." />
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --bg-2: #111b2b;
+      --panel: rgba(255,255,255,0.04);
+      --panel-strong: rgba(255,255,255,0.08);
+      --line: rgba(255,255,255,0.12);
+      --text: #edf4ff;
+      --muted: #9fb0c7;
+      --accent: #4fd1c5;
+      --accent-2: #ffb648;
+      --good: #5ee7a2;
+      --shadow: rgba(0,0,0,0.28);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background:
+        radial-gradient(circle at top left, rgba(79,209,197,0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(255,182,72,0.14), transparent 24%),
+        linear-gradient(180deg, var(--bg) 0%, #070b11 100%);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 0 26px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 32px;
+    }
+
+    .brand {
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      font-size: 1.2rem;
+    }
+
+    .brand span { color: var(--accent); }
+    .nav {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .nav a,
+    .button {
+      color: var(--text);
+      text-decoration: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.02);
+      transition: 0.2s ease;
+      display: inline-block;
+    }
+
+    .nav a:hover,
+    .button:hover { border-color: rgba(79,209,197,0.5); transform: translateY(-1px); }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.3fr 0.7fr;
+      gap: 30px;
+      align-items: center;
+      padding: 14px 0 24px;
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(2.2rem, 4vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -0.06em;
+    }
+
+    .lead {
+      margin: 0;
+      font-size: 1.08rem;
+      color: var(--muted);
+      max-width: 62ch;
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 26px;
+    }
+
+    .button.primary {
+      background: linear-gradient(180deg, var(--accent), #2eaaa2);
+      color: #062a26;
+      font-weight: 700;
+      border-color: transparent;
+      box-shadow: 0 12px 28px rgba(79,209,197,0.24);
+    }
+
+    .panel {
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 28px 60px var(--shadow);
+    }
+
+    .mini-grid {
+      display: grid;
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .mini-stat {
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(10,14,20,0.7);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .mini-stat strong {
+      display: block;
+      font-size: 1.4rem;
+      color: var(--accent);
+      letter-spacing: -0.05em;
+    }
+
+    .section {
+      margin-top: 26px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+    }
+
+    .section h2 {
+      margin: 0 0 16px;
+      font-size: 1.4rem;
+      letter-spacing: -0.04em;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 1.03rem;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.97rem;
+    }
+
+    .checklist {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+
+    .checklist li + li { margin-top: 10px; }
+
+    .docs-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 14px;
+      margin-top: 12px;
+    }
+
+    .doc-item {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .doc-item a {
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .doc-item p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 0.96rem;
+    }
+
+    footer {
+      margin-top: 32px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    @media (max-width: 760px) {
+      .hero, .cards, .docs-list { grid-template-columns: 1fr; }
+      .topbar { flex-direction: column; align-items: flex-start; gap: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="brand">EnergyRoom<span>3D</span></div>
+      <nav class="nav" aria-label="Dokumentacja">
+        <a href="../index.html">Start</a>
+        <a href="README.md">Docs hub</a>
+        <a href="user-guide.html">Przewodnik</a>
+        <a href="ARCHITECTURE.md">Architektura</a>
+      </nav>
+    </div>
+
+    <section class="hero">
+      <div>
+        <h1>Dokumentacja projektu</h1>
+        <p class="lead">
+          EnergyRoom 3D to narzędzie do projektowania i symulacji energetyki domu w przeglądarce. Dokumentacja ma pomóc szybko zrozumieć, co można projektować, jak działa symulacja i jakie etapy rozwoju wprowadziły najważniejsze funkcje.
+        </p>
+        <div class="cta-row">
+          <a class="button primary" href="../app.html">Otwórz symulator</a>
+          <a class="button" href="user-guide.html">Zobacz przewodnik</a>
+        </div>
+      </div>
+
+      <aside class="panel">
+        <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted);">Szybkie podsumowanie</div>
+        <div class="mini-grid">
+          <div class="mini-stat"><strong>PV</strong><span>Analiza paneli, cieni i generacji</span></div>
+          <div class="mini-stat"><strong>Bateria</strong><span>Rozkład energii i rezerwa SOC</span></div>
+          <div class="mini-stat"><strong>Instalacja</strong><span>Obwody, zabezpieczenia, przewody i koszty</span></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="section">
+      <h2>Dlaczego ten projekt jest przydatny</h2>
+      <div class="cards">
+        <article class="card">
+          <h3>Uczysz się na modelu</h3>
+          <p>Projekt pokazuje nie tylko zużycie energii, ale też relacje między domem, urządzeniami, panelem PV, baterią i siecią.</p>
+        </article>
+        <article class="card">
+          <h3>Porównujesz scenariusze</h3>
+          <p>Możesz sprawdzać, jak zmienia się koszt energii po zmianie położenia paneli, liczby urządzeń czy strategii magazynowania.</p>
+        </article>
+        <article class="card">
+          <h3>Rozwijasz architekturę</h3>
+          <p>System jest podzielony na moduły danych, energii, sceny i UI, co ułatwia rozwój i testy.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Najważniejsze obszary</h2>
+      <ul class="checklist">
+        <li>Projektowanie budynku: pokoje, ściany, przegrody, dachy i otwory.</li>
+        <li>Moduł energii: PV, baterie, taryfy, priorytety i bilanse.</li>
+        <li>Instalacja elektryczna: gniazdka, obwody, zabezpieczenia i straty I²R.</li>
+        <li>Środowisko i cienie: oświetlenie, sezon, pozycja słońca i zacienienie paneli.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>Dokumenty</h2>
+      <div class="docs-list">
+        <div class="doc-item">
+          <a href="USER_GUIDE.md">Przewodnik użytkownika</a>
+          <p>Najlepszy punkt startowy dla nowych użytkowników i osób testujących projekt.</p>
+        </div>
+        <div class="doc-item">
+          <a href="ARCHITECTURE.md">Architektura</a>
+          <p>Opis głównych modułów, zależności i zasad organizacji kodu.</p>
+        </div>
+        <div class="doc-item">
+          <a href="ETAP1.md">Etap 1</a>
+          <p>Tłumaczenia, priorytet PV, dzień/noc, siatka i cieniowanie.</p>
+        </div>
+        <div class="doc-item">
+          <a href="ETAP2.md">Etap 2</a>
+          <p>Instalacja elektryczna, zabezpieczenia, przewody i model bezpieczeństwa.</p>
+        </div>
+        <div class="doc-item">
+          <a href="ETAP3.md">Etap 3</a>
+          <p>Projektowanie domu, piętra, dachu, ścian i otworów.</p>
+        </div>
+        <div class="doc-item">
+          <a href="../README.md">README projektu</a>
+          <p>Krótka wersja wprowadzająca, cel projektu i szybki start.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      EnergyRoom 3D — dokumentacja zorientowana na użytkownika, projektanta i developerów.
+    </footer>
+  </div>
+</body>
+</html>

@@ -171,29 +171,29 @@
     <div class="step"><span class="step-no">3</span><div><h3 data-i18n="landing.step3.h">Podejmuj decyzje</h3><p data-i18n="landing.step3.p">Obserwuj koszty, osiągnięcia i raport końcowy.</p></div></div>
   </div></section>
 
-  <footer><span data-i18n="landing.footer">Działa w całości lokalnie w przeglądarce — projekt zapisuje się na tym urządzeniu, bez konta i bez serwera.</span><a class="legal-link" href="legal.html" data-i18n="legal.link">Informacje prawne</a></footer>
+  <footer><span data-i18n="landing.footer">Działa w całości lokalnie w przeglądarce — projekt zapisuje się na tym urządzeniu, bez konta i bez serwera.</span><a class="legal-link" href="docs/index.html">Dokumentacja</a><a class="legal-link" href="legal.html" data-i18n="legal.link">Informacje prawne</a></footer>
 </div>
 
 <script src="js/i18n/dictionary.js"></script>
 <script src="js/i18n/catalog_en.js"></script>
 <script src="js/i18n/I18n.js"></script>
 <script>
-  I18n.init();
-  document.title = I18n.t('landing.title');
-  document.querySelectorAll('.lang-switch button').forEach(b=>b.addEventListener('click',()=>{ I18n.setLang(b.dataset.lang); document.title = I18n.t('landing.title'); }));
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  document.querySelectorAll('.num').forEach(el=>{
-    const to = Number(el.dataset.to);
-    if (prefersReduced){ el.textContent = to; return; }
-    const start = performance.now(), dur = 900;
-    function tick(now){
-      const t = Math.min(1, (now-start)/dur);
-      const eased = 1 - Math.pow(1-t, 3);
-      el.textContent = Math.round(eased*to);
-      if (t<1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-  });
+I18n.init();
+document.title = I18n.t('landing.title');
+document.querySelectorAll('.lang-switch button').forEach(b=>b.addEventListener('click',()=>{ I18n.setLang(b.dataset.lang); document.title = I18n.t('landing.title'); }));
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+document.querySelectorAll('.num').forEach(el=>{
+  const to = Number(el.dataset.to);
+  if (prefersReduced){ el.textContent = to; return; }
+  const start = performance.now(), dur = 900;
+  function tick(now){
+    const t = Math.min(1, (now-start)/dur);
+    const eased = 1 - Math.pow(1-t, 3);
+    el.textContent = Math.round(eased*to);
+    if (t<1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+});
 </script>
 </body>
 </html>

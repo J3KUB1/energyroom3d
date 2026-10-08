@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>EnergyRoom 3D</title>
 <meta name="description" content="Interaktywny symulator 3D zużycia energii — pokój, garaż i panele fotowoltaiczne.">
 <meta name="theme-color" content="#0d121a">
@@ -102,9 +102,9 @@
   <div id="main">
 
     <!-- LEFT: asset panel -->
-    <aside id="leftPanel">
+    <aside id="leftPanel" aria-labelledby="assetPanelTitle" tabindex="-1">
       <div class="panel-context">
-        <div class="panel-context-title" data-i18n="ui.library.title">Dodaj do pomieszczenia</div>
+        <div class="panel-context-title" id="assetPanelTitle" data-i18n="ui.library.title">Dodaj do pomieszczenia</div>
         <div class="panel-context-room" id="assetRoomName">Sypialnia</div>
         <div class="panel-context-hint" id="assetRoomHint" data-i18n="ui.library.help">Wybierz kategorię, a potem kliknij element, aby go dodać.</div>
       </div>
@@ -126,9 +126,9 @@
       <div id="threeContainer"></div>
 
       <!-- Mobile-only: toggles for the asset/properties drawers (hidden on desktop via CSS) -->
-      <button id="btnMobileAssets" class="mobile-fab left" title="Assety" data-i18n-title="ui.tip.assets">☰<span data-i18n="ui.panel.assets">Assety</span></button>
-      <button id="btnMobileProps" class="mobile-fab right" title="Właściwości" data-i18n-title="ui.tip.properties">ℹ<span data-i18n="ui.panel.properties">Właściwości</span></button>
-      <div id="mobileScrim" class="mobile-scrim hidden"></div>
+      <button id="btnMobileAssets" class="mobile-fab left" title="Assety" data-i18n-title="ui.tip.assets" aria-expanded="false" aria-controls="leftPanel">☰<span data-i18n="ui.panel.assets">Assety</span></button>
+      <button id="btnMobileProps" class="mobile-fab right" title="Właściwości" data-i18n-title="ui.tip.properties" aria-expanded="false" aria-controls="rightPanel">ℹ<span data-i18n="ui.panel.properties">Właściwości</span></button>
+      <div id="mobileScrim" class="mobile-scrim hidden" aria-hidden="true"></div>
 
       <div class="viewport-toolbar">
         <div class="tool-group" id="gizmoModeGroup">
@@ -229,7 +229,7 @@
     </section>
 
     <!-- RIGHT: properties panel -->
-    <aside id="rightPanel">
+    <aside id="rightPanel" aria-labelledby="btnMobileProps" tabindex="-1">
       <div id="propEmpty" class="prop-empty" data-i18n="ui.props.empty">Zaznacz obiekt w scenie, aby zobaczyć jego właściwości.</div>
       <div id="propContent" class="hidden"></div>
     </aside>

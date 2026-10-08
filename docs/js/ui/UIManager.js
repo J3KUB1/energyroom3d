@@ -536,7 +536,13 @@ class UIManager {
         card.className = 'asset-card';
         const price = def.priceZl + def.laborZl;
         card.innerHTML = `<div class="asset-icon">${ELICONS[def.id]||'⚡'}</div><div class="asset-name">${I18n.deviceName(def)}</div><div class="asset-power" style="color:var(--accent-power)">${price>0 ? I18n.num(price,0)+' zł' : I18n.t('elec.operatorOwned')}</div>`;
-        card.addEventListener('click', ()=>{ this._placeElectrical(def.id); if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open'); });
+        card.addEventListener('click', ()=>{
+          this._placeElectrical(def.id);
+          if (this.isMobile()){
+            document.getElementById('leftPanel').classList.remove('mobile-open');
+            this._syncMobileNavState();
+          }
+        });
         grid.appendChild(card);
       }
       return;
@@ -566,7 +572,15 @@ class UIManager {
       if (!room || room.id==='__all__'){ this.toast(I18n.t('msg.pickRoomObject')); return; }
       const pos = { x: room.settings.width/2, y:0, z: room.settings.length/2 };
       const inst = isFurniture ? this.objectManager.addFurniture(defId,pos,room.id) : this.objectManager.addDevice(defId,pos,room.id);
-      if (inst){ this.transformManager.select(inst.id); this.projectManager.pushHistory(); this.log(I18n.t('log.added', { name: I18n.deviceName(inst.def) })); if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open'); }
+      if (inst){
+        this.transformManager.select(inst.id);
+        this.projectManager.pushHistory();
+        this.log(I18n.t('log.added', { name: I18n.deviceName(inst.def) }));
+        if (this.isMobile()){
+          document.getElementById('leftPanel').classList.remove('mobile-open');
+          this._syncMobileNavState();
+        }
+      }
     });
     return card;
   }
@@ -608,7 +622,10 @@ class UIManager {
     this.petManager.awardPVInstalled(totalPanels);
     this.questManager.checkMilestones(this._questCtx());
     if (this.pvInstallMode) this._refreshPvInstallBanner();
-    if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open');
+    if (this.isMobile()){
+      document.getElementById('leftPanel').classList.remove('mobile-open');
+      this._syncMobileNavState();
+    }
   }
 
   _placeBattery(defId){
@@ -621,7 +638,10 @@ class UIManager {
     this.projectManager.pushHistory();
     this.log(I18n.t('log.batteryAdded', { name: I18n.deviceName(inst.def) }));
     this.questManager.checkMilestones(this._questCtx());
-    if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open');
+    if (this.isMobile()){
+      document.getElementById('leftPanel').classList.remove('mobile-open');
+      this._syncMobileNavState();
+    }
   }
 
   // ============================================================
@@ -807,19 +827,79 @@ class UIManager {
   _bindMobileNav(){
     const left = document.getElementById('leftPanel'), right = document.getElementById('rightPanel');
     const scrim = document.getElementById('mobileScrim');
-    const closeDrawers = ()=>{ left.classList.remove('mobile-open'); right.classList.remove('mobile-open'); scrim.classList.add('hidden'); };
-    document.getElementById('btnMobileAssets').addEventListener('click', ()=>{
-      const opening = !left.classList.contains('mobile-open');
-      closeDrawers();
-      if (opening){ left.classList.add('mobile-open'); scrim.classList.remove('hidden'); }
+    const assetsButton = document.getElementById('btnMobileAssets');
+    const propsButton = document.getElementById('btnMobileProps');
+    this._mobileDrawerTrigger = null;
+    const syncState = (focusOpenPanel=false)=>{
+      if (!this.isMobile()){
+        left.classList.remove('mobile-open');
+        right.classList.remove('mobile-open');
+      }
+      const assetsOpen = left.classList.contains('mobile-open');
+      const propsOpen = right.classList.contains('mobile-open');
+      assetsButton.setAttribute('aria-expanded', String(assetsOpen));
+      propsButton.setAttribute('aria-expanded', String(propsOpen));
+      const hasOpenDrawer = assetsOpen || propsOpen;
+      left.inert = this.isMobile() && !assetsOpen;
+      right.inert = this.isMobile() && !propsOpen;
+      left.setAttribute('aria-hidden', String(this.isMobile() && !assetsOpen));
+      right.setAttribute('aria-hidden', String(this.isMobile() && !propsOpen));
+      scrim.classList.toggle('hidden', !hasOpenDrawer);
+      scrim.setAttribute('aria-hidden', String(!hasOpenDrawer));
+      if (focusOpenPanel){
+        (assetsOpen ? left : right).focus({preventScroll:true});
+      }
+    };
+    const closeDrawers = (restoreFocus=true)=>{
+      const wasOpen = left.classList.contains('mobile-open') || right.classList.contains('mobile-open');
+      left.classList.remove('mobile-open');
+      right.classList.remove('mobile-open');
+      syncState();
+      if (restoreFocus && wasOpen && this._mobileDrawerTrigger?.isConnected) this._mobileDrawerTrigger.focus({preventScroll:true});
+      this._mobileDrawerTrigger = null;
+    };
+    const trapFocus = panel => event=>{
+      if (event.key!=='Tab' || !panel.classList.contains('mobile-open')) return;
+      const focusable = [...panel.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+        .filter(element=>!element.hidden && element.getAttribute('aria-hidden')!=='true' && element.getClientRects().length>0);
+      if (!focusable.length){ event.preventDefault(); panel.focus(); return; }
+      const first = focusable[0], last = focusable[focusable.length-1];
+      if (!panel.contains(document.activeElement)){
+        event.preventDefault(); (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && (document.activeElement===first || document.activeElement===panel)){
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement===last || document.activeElement===panel)){
+        event.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener('keydown', event=>{
+      const openPanel = left.classList.contains('mobile-open') ? left :
+        (right.classList.contains('mobile-open') ? right : null);
+      if (openPanel) trapFocus(openPanel)(event);
     });
-    document.getElementById('btnMobileProps').addEventListener('click', ()=>{
+    assetsButton.addEventListener('click', ()=>{
+      const opening = !left.classList.contains('mobile-open');
+      closeDrawers(false);
+      if (opening){
+        this._mobileDrawerTrigger = assetsButton;
+        left.classList.add('mobile-open');
+        syncState(true);
+      }
+    });
+    propsButton.addEventListener('click', ()=>{
       const opening = !right.classList.contains('mobile-open');
-      closeDrawers();
-      if (opening){ right.classList.add('mobile-open'); scrim.classList.remove('hidden'); }
+      closeDrawers(false);
+      if (opening){
+        this._mobileDrawerTrigger = propsButton;
+        right.classList.add('mobile-open');
+        syncState(true);
+      }
     });
     scrim.addEventListener('click', closeDrawers);
+    window.addEventListener('resize', ()=>syncState());
+    this._syncMobileNavState = syncState;
     this._closeMobileDrawers = closeDrawers;
+    syncState();
   }
 
   _focusSelected(){ const inst=this.objectManager.find(this.transformManager.selectedId); if (inst) this.sceneManager.focusOn(inst.group); }
@@ -843,7 +923,7 @@ class UIManager {
   _bindKeyboard(){
     document.addEventListener('keydown', (e)=>{
       const tag = (e.target.tagName||'').toLowerCase();
-      if (tag==='input' || tag==='select' || tag==='textarea') return;
+      if ((tag==='input' || tag==='select' || tag==='textarea') && e.key!=='Escape') return;
       if (e.key==='Delete' || e.key==='Backspace'){ e.preventDefault(); this._deleteSelected(); }
       else if (e.ctrlKey && e.key.toLowerCase()==='d'){ e.preventDefault(); this._duplicateSelected(); }
       else if (e.ctrlKey && e.key.toLowerCase()==='z'){ e.preventDefault(); this.projectManager.undo(); }
@@ -853,7 +933,11 @@ class UIManager {
       else if (e.key.toLowerCase()==='r'){ this._setGizmoMode('scale'); }
       else if (e.key.toLowerCase()==='f'){ this._focusSelected(); }
       else if (e.key.toLowerCase()==='g'){ const c=document.getElementById('chkGrid'); c.checked=!c.checked; this.roomBuilder.setGridVisible(c.checked); }
-      else if (e.key==='Escape'){ this.transformManager.deselect(); this._closeAllModals(); }
+      else if (e.key==='Escape'){
+        const drawerOpen = document.querySelector('#leftPanel.mobile-open, #rightPanel.mobile-open');
+        if (drawerOpen){ this._closeMobileDrawers(); return; }
+        this.transformManager.deselect(); this._closeAllModals();
+      }
       else if (e.key===' '){ e.preventDefault(); if (this.currentMode==='sim'){ document.getElementById('playPauseBtn').click(); } }
     });
   }
@@ -917,7 +1001,8 @@ class UIManager {
     if (this.isMobile() && !transformOnly){
       document.getElementById('leftPanel').classList.remove('mobile-open');
       document.getElementById('rightPanel').classList.add('mobile-open');
-      document.getElementById('mobileScrim').classList.remove('hidden');
+      this._mobileDrawerTrigger = document.getElementById('btnMobileProps');
+      this._syncMobileNavState(true);
     }
 
     if (transformOnly && this._lastRenderedId===inst.id){
@@ -2655,7 +2740,11 @@ class UIManager {
       if (garage) this.setActiveRoom(garage.id);   // any room whose roof can carry panels (mono-pitch / gable)
       this.currentCategory = 'solar';
       this.renderCategoryTabs(); this.renderAssetGrid();
-      if (this.isMobile()) document.getElementById('leftPanel').classList.add('mobile-open');
+      if (this.isMobile()){
+        document.getElementById('leftPanel').classList.add('mobile-open');
+        this._mobileDrawerTrigger = document.getElementById('btnMobileAssets');
+        this._syncMobileNavState(true);
+      }
       this._refreshPvInstallBanner();
     } else {
       this._checkAchievements();
