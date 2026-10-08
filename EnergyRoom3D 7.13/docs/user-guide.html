@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EnergyRoom 3D — przewodnik użytkownika</title>
+  <meta name="description" content="Przewodnik użytkownika EnergyRoom 3D: od projektu domu, przez urządzenia i PV, aż po symulację i optymalizację kosztów." />
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --panel: rgba(255,255,255,0.05);
+      --panel-strong: rgba(255,255,255,0.08);
+      --line: rgba(255,255,255,0.12);
+      --text: #edf4ff;
+      --muted: #a5b4c9;
+      --accent: #4fd1c5;
+      --accent-2: #ffb648;
+      --good: #5ee7a2;
+      --shadow: rgba(0,0,0,0.26);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background:
+        radial-gradient(circle at top left, rgba(79,209,197,0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(255,182,72,0.12), transparent 24%),
+        linear-gradient(180deg, #0b0f17 0%, #070b11 100%);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.65;
+    }
+
+    a { color: inherit; }
+
+    .container {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 20px 64px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 24px;
+    }
+
+    .brand {
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+    }
+
+    .brand span { color: var(--accent); }
+
+    .nav {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .nav a {
+      color: var(--text);
+      text-decoration: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 20px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .sidebar h3 {
+      margin: 0 0 12px;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+    }
+
+    .toc {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .toc a {
+      display: block;
+      color: var(--muted);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      padding: 7px 10px 7px 12px;
+      border-radius: 0 8px 8px 0;
+      transition: 0.2s ease;
+    }
+
+    .toc a:hover {
+      color: var(--text);
+      background: rgba(255,255,255,0.02);
+      border-color: var(--accent);
+    }
+
+    .content {
+      display: grid;
+      gap: 22px;
+    }
+
+    .hero {
+      padding: 26px 28px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(79,209,197,0.09), rgba(255,182,72,0.06));
+      box-shadow: 0 24px 50px var(--shadow);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2.1rem, 4vw, 3.4rem);
+      line-height: 1.05;
+      letter-spacing: -0.06em;
+    }
+
+    .lead {
+      margin: 0;
+      font-size: 1.04rem;
+      color: var(--muted);
+      max-width: 62ch;
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 22px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 11px 16px;
+      text-decoration: none;
+      font-weight: 700;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.02);
+      color: var(--text);
+    }
+
+    .button.primary {
+      background: linear-gradient(180deg, var(--accent), #2b9e97);
+      color: #052b28;
+      border-color: transparent;
+      box-shadow: 0 12px 28px rgba(79,209,197,0.18);
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 22px 20px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 1.45rem;
+      letter-spacing: -0.04em;
+    }
+
+    .card p, .card li {
+      color: var(--muted);
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .step-number {
+      display: inline-grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(79,209,197,0.15);
+      color: var(--accent);
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+
+    .step h3 { margin: 0 0 6px; }
+    .step p { margin: 0; color: var(--muted); }
+
+    ul.checklist {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .mini {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(9,12,18,0.7);
+    }
+
+    .mini strong {
+      display: block;
+      color: var(--accent);
+      font-size: 1.4rem;
+      letter-spacing: -0.05em;
+      margin-bottom: 6px;
+    }
+
+    .mini span {
+      color: var(--muted);
+    }
+
+    .faq {
+      display: grid;
+      gap: 12px;
+    }
+
+    .faq-item {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.02);
+    }
+
+    .faq-item strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 1rem;
+    }
+
+    footer {
+      margin-top: 10px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    @media (max-width: 860px) {
+      .container { padding: 18px 14px 40px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .nav { width: 100%; }
+      .nav a { flex: 1 1 calc(50% - 8px); text-align: center; }
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: relative; top: 0; padding: 14px; }
+      .hero { padding: 18px 16px; }
+      .card { padding: 18px 16px; }
+      .steps, .mini-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 480px) {
+      .nav a { flex-basis: 100%; }
+      .cta-row { flex-direction: column; }
+      .button { width: 100%; }
+      .brand { font-size: 1.08rem; }
+      h1 { font-size: clamp(1.8rem, 10vw, 2.6rem); }
+      .card h2 { font-size: 1.2rem; }
+      .mini strong { font-size: 1.15rem; }
+      .topbar { padding-bottom: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="topbar">
+      <div class="brand">EnergyRoom<span>3D</span></div>
+      <nav class="nav" aria-label="Nawigacja">
+        <a href="../index.html">Start</a>
+        <a href="index.html">Dokumentacja</a>
+        <a href="../app.html">Symulator</a>
+      </nav>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <h3>Spis treści</h3>
+        <ul class="toc">
+          <li><a href="#start">1. Start</a></li>
+          <li><a href="#home">2. Projekt domu</a></li>
+          <li><a href="#devices">3. Urządzenia</a></li>
+          <li><a href="#pv">4. PV i bateria</a></li>
+          <li><a href="#installation">5. Instalacja</a></li>
+          <li><a href="#simulation">6. Symulacja</a></li>
+          <li><a href="#optimize">7. Optymalizacja</a></li>
+        </ul>
+      </aside>
+
+      <main class="content">
+        <section class="hero" id="start">
+          <h1>Przewodnik użytkownika</h1>
+          <p class="lead">
+            EnergyRoom 3D pomaga zaprojektować dom jako system energetyczny. Zamiast patrzeć tylko na 3D, możesz sprawdzić, jak budynek, instalacja, urządzenia, PV i bateria wpływają na zużycie energii, koszty i komfort użytkowania.
+          </p>
+          <div class="cta-row">
+            <a class="button primary" href="../app.html">Uruchom symulator</a>
+            <a class="button" href="index.html">Powrót do dokumentacji</a>
+          </div>
+        </section>
+
+        <section class="card" id="home">
+          <h2>1. Zacznij od projektu domu</h2>
+          <p>Najpierw zaprojektuj układ pomieszczeń, ścian i dachu. Wybierz liczbę pięter, rozmieszczenie pokoi i kształt budynku. To wpływa na dostęp światła, cienie, liczbę okien i możliwy rozkład urządzeń.</p>
+          <div class="steps">
+            <div class="step">
+              <div class="step-number">1</div>
+              <h3>Dodaj pokoje</h3>
+              <p>Rozstaw sypialnie, kuchnię, salon, łazienkę i garaż.</p>
+            </div>
+            <div class="step">
+              <div class="step-number">2</div>
+              <h3>Ustaw ściany</h3>
+              <p>Ustal układ oraz wymiary, aby odzwierciedlić realną geometrię domu.</p>
+            </div>
+            <div class="step">
+              <div class="step-number">3</div>
+              <h3>Dobierz dach</h3>
+              <p>Przejrzyj możliwości połaci i orientacji paneli PV.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" id="devices">
+          <h2>2. Dodawaj urządzenia i obciążenia</h2>
+          <p>Po zaprojektowaniu budynku wprowadź urządzenia codziennego użytkowania. Każdy z nich ma własny profil pracy, który wpływa na szczyty zapotrzebowania i wysokość rachunku.</p>
+          <ul class="checklist">
+            <li>lodówka i zamrażarka pracują cyklicznie</li>
+            <li>bojler i piekarnik mają mocne, krótkie okresy pracy</li>
+            <li>TV, komputer i ładowarki generują stałe, rozproszone zużycie</li>
+            <li>wspólny profil dominujących urządzeń decyduje o szczytach mocy</li>
+          </ul>
+        </section>
+
+        <section class="card" id="pv">
+          <h2>3. PV i magazyn energii</h2>
+          <p>Panele fotowoltaiczne i bateria są kluczem do poprawy bilansu energetycznego. Warto zadbać o ich właściwe położenie oraz rezerwę zapasu energii.</p>
+          <div class="mini-grid">
+            <div class="mini">
+              <strong>PV</strong>
+              <span>Wartość zależy od kąta, orientacji, daty, pory dnia i cienia.</span>
+            </div>
+            <div class="mini">
+              <strong>Bateria</strong>
+              <span>Pomaga przesunąć energię z godzin słonecznych do szczytu wieczornego.</span>
+            </div>
+            <div class="mini">
+              <strong>Cień</strong>
+              <span>Zacienienie paneli zmniejsza realną produkcję, nie tylko „wizualną”.</span>
+            </div>
+            <div class="mini">
+              <strong>Rezerwa SOC</strong>
+              <span>Umożliwia zachowanie zapasu na wieczór i awarie sieci.</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" id="installation">
+          <h2>4. Zadbaj o instalację elektryczną</h2>
+          <p>Instalacja to nie tylko estetyka. To realna logika bezpieczeństwa i strat energii. Obejmuję obwody, przewody, gniazdka, zabezpieczenia i wyłączniki główne.</p>
+          <ul class="checklist">
+            <li>dobór prawidłowego zabezpieczenia do przewodu</li>
+            <li>kontrola spadku napięcia i strat I²R</li>
+            <li>przeanalizowanie kosztów robocizny i elementów instalacji</li>
+            <li>sprawdzenie scenariuszy awaryjnych i przeciążenia</li>
+          </ul>
+        </section>
+
+        <section class="card" id="simulation">
+          <h2>5. Uruchom symulację</h2>
+          <p>Po zdefiniowaniu budynku, urządzeń i źródeł energii uruchom model i sprawdź wynik. Skup się na danych, które naprawdę pomagają podejmować decyzje: import i eksport z sieci, zużycie urządzeń, buforowanie baterii i ładunki szczytowe.</p>
+          <ul class="checklist">
+            <li>czy dom jest autarkiczny w godzinach szczytu?</li>
+            <li>czy bateria zapełnia się wystarczająco?</li>
+            <li>czy przyrost PV jest efektywnie wykorzystywany?</li>
+            <li>czy koszty instalacji kompensują oszczędności w rachunku?</li>
+          </ul>
+        </section>
+
+        <section class="card" id="optimize">
+          <h2>6. Optymalizuj i porównuj scenariusze</h2>
+          <p>Najlepszy rezultat zwykle pojawia się po kilku iteracjach. Porównuj warianty i szukaj miejsca, w którym zmiana układu paneli, wykorzystania baterii lub rozmieszczenia urządzeń daje największą oszczędność.</p>
+          <div class="faq">
+            <div class="faq-item">
+              <strong>Jak szybko zacząć?</strong>
+              Zacznij od małego, realistycznego domu z kilkoma urządzeniami i jednym panelem PV. To daje szybki feedback bez zbytniego chaosu.
+            </div>
+            <div class="faq-item">
+              <strong>Co jest najważniejsze?</strong>
+              Najczęściej największą różnicę robią: pozycja PV, szczyty zużycia i strategia ładowania baterii.
+            </div>
+            <div class="faq-item">
+              <strong>Kiedy warto dodawać więcej rozwiązań?</strong>
+              Gdy dominujący scenariusz jest już stabilny, można testować złożone warianty: większą baterię, inny dach, lepszą sieć lub mniejsze zużycie urządzeń.
+            </div>
+          </div>
+        </section>
+
+        <footer>
+          EnergyRoom 3D — przewodnik zorientowany na praktykę, naukę i realne decyzje projektowe.
+        </footer>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

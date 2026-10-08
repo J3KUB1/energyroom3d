@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>EnergyRoom 3D — informacje prawne</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+  body{min-height:100vh;background:radial-gradient(900px 500px at 10% 0%,rgba(79,209,197,.1),transparent 60%),var(--bg-deep);color:var(--text-1);font-family:var(--font-body)}
+  .legal-page{max-width:900px;margin:auto;padding:34px 22px 70px}.legal-top{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:58px}.legal-brand{font:700 18px var(--font-display)}.legal-brand span{color:var(--accent-data)}
+  .legal-actions{display:flex;align-items:center;gap:8px}.legal-lang{display:flex;gap:6px}.legal-lang button{background:transparent;color:var(--text-2);border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer}.legal-lang button:hover{color:var(--text-1);border-color:var(--accent-data)}.app-link{color:#062420;background:var(--accent-data);border-radius:8px;padding:8px 12px;text-decoration:none;font-weight:700;font-size:12px}.app-link:hover{filter:brightness(1.08)}
+  h1{font:700 clamp(2rem,5vw,3.2rem) var(--font-display);margin:0 0 12px;letter-spacing:-.02em}.lead{color:var(--text-2);line-height:1.65;max-width:60ch;margin:0 0 26px}.legal-meta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 34px}.legal-pill{display:inline-flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid var(--border);border-radius:999px;color:var(--text-2);font-size:12px;background:rgba(255,255,255,.035)}.legal-pill b{color:var(--accent-good)}.legal-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.legal-card{padding:24px;border:1px solid var(--border);border-radius:16px;background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.018));transition:.2s}.legal-card:hover{border-color:rgba(79,209,197,.35);transform:translateY(-2px)}.legal-icon{display:block;font-size:24px;margin-bottom:14px}.legal-card h2{font:600 17px var(--font-display);margin:0 0 10px}.legal-card p{color:var(--text-2);font-size:14px;line-height:1.65;margin:0}.legal-note{margin-top:18px;padding:14px 16px;border-left:3px solid var(--accent-power);border-radius:8px;background:rgba(255,182,72,.07);color:var(--text-2);font-size:13px;line-height:1.6}.back{display:inline-block;margin-top:36px;color:var(--accent-data);text-decoration:none;font-weight:600}.back:hover{text-decoration:underline}@media(max-width:640px){.legal-top{margin-bottom:40px}.legal-grid{grid-template-columns:1fr}.legal-page{padding:24px 18px 52px}}
+</style>
+</head>
+<body>
+<main class="legal-page">
+  <div class="legal-top"><div class="legal-brand">⚡ EnergyRoom<span>3D</span></div><div class="legal-actions"><a class="app-link" href="app.html" data-i18n="legal.openApp">Otwórz aplikację</a><div class="legal-lang"><button type="button" data-lang="pl">PL</button><button type="button" data-lang="en">EN</button></div></div></div>
+  <h1 data-i18n="legal.title">Informacje prawne</h1><p class="lead" data-i18n="legal.subtitle">Krótko i jasno: co zapisuje aplikacja i czego nie robi.</p>
+  <div class="legal-meta"><span class="legal-pill">✓ <b data-i18n="legal.meta.local">Lokalnie</b></span><span class="legal-pill">✓ <b data-i18n="legal.meta.noTracking">Bez śledzenia</b></span><span class="legal-pill">⌁ <span data-i18n="legal.meta.updated">Aktualizacja: wrzesień 2026</span></span></div>
+  <div class="legal-grid">
+    <article class="legal-card"><span class="legal-icon">🍪</span><h2 data-i18n="legal.cookies.title">Pliki cookies</h2><p data-i18n="legal.cookies.body"></p></article>
+    <article class="legal-card"><span class="legal-icon">🛡️</span><h2 data-i18n="legal.privacy.title">Prywatność</h2><p data-i18n="legal.privacy.body"></p></article>
+    <article class="legal-card"><span class="legal-icon">💾</span><h2 data-i18n="legal.local.title">Zapis lokalny</h2><p data-i18n="legal.local.body"></p></article>
+    <article class="legal-card"><span class="legal-icon">📐</span><h2 data-i18n="legal.disclaimer.title">Charakter symulacji</h2><p data-i18n="legal.disclaimer.body"></p></article>
+  </div>
+  <div class="legal-note" data-i18n="legal.note">Jeśli usuniesz dane witryny w przeglądarce, zapis projektu może zostać utracony. Użyj eksportu projektu, aby zachować kopię.</div>
+  <a class="back" href="index.html" data-i18n="legal.back">Wróć do strony głównej</a>
+</main>
+<script src="js/i18n/dictionary.js"></script><script src="js/i18n/catalog_en.js"></script><script src="js/i18n/I18n.js"></script>
+<script>I18n.init();document.querySelectorAll('[data-lang]').forEach(b=>b.addEventListener('click',()=>{I18n.setLang(b.dataset.lang);document.documentElement.lang=b.dataset.lang;document.title=I18n.t('legal.title')}));document.title=I18n.t('legal.title');</script>
+</body></html>
