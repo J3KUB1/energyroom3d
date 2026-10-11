@@ -80,30 +80,10 @@
   }
   rebuildHouse();
 
-  // ---- Electrical installation (Stage 2): sockets/strips/board/meter are objects; circuits, breakers and wires live in ElectricalSystem ----
-  const electrical = new ElectricalSystem({
-    getElements: ()=>objectManager.getElectrical(),
-    getDevices: ()=>objectManager.getDevices(),
-    getRooms: ()=>houseState.rooms.map(r=>({ id:r.id, name:r.name, type:r.type, offsetX:r.offsetX||0, offsetZ:r.offsetZ||0, elevation:BuildingModel.elevation(houseState, r), width:r.settings.width, length:r.settings.length, height:r.settings.height })),
-    createElement: (defId, roomId, pos, rotY)=>objectManager.addElectrical(defId, pos, roomId, rotY),
-    removeElement: (id)=>objectManager.remove(id),
-    onEvent: (ev)=>handleElectricalEvent(ev),
-  });
-  const wireRenderer = new WireRenderer(sceneManager.scene, electrical);
-  objectManager.onDeviceAdded = (inst)=>{ if (!electrical.suspendAutoPlug) electrical.autoPlug(inst); };
-  function handleElectricalEvent(ev){
-    const ui = window.EnergyRoom3D && window.EnergyRoom3D.ui; if (!ui) return;
-    const b = ev.breakerId ? electrical.breaker(ev.breakerId) : null;
-    const circ = ev.circuitIds && ev.circuitIds.length ? electrical.circuit(ev.circuitIds[0]) : (ev.circuitId ? electrical.circuit(ev.circuitId) : null);
-    const name = (circ && circ.name) || (b && b.name) || '';
-    const amps = ev.currentA != null ? ev.currentA.toFixed(1) : '';
-    let msg = null;
-    if (ev.type === 'breakerTrip') msg = I18n.t(ev.reason === 'shortCircuit' ? 'elec.event.breakerShort' : 'elec.event.breakerOverload', { name, amps, rating: b ? b.ratingA : '' });
-    else if (ev.type === 'mainTrip') msg = I18n.t('elec.event.mainTrip', { amps });
-    else if (ev.type === 'stripTrip') msg = I18n.t('elec.event.stripTrip', { amps });
-    else if (ev.type === 'cableOverheat') msg = I18n.t('elec.event.cableOverheat', { name, amps });
-    if (msg){ ui.log(msg); ui.toast('⚡ ' + msg); ui.onElectricalEvent && ui.onElectricalEvent(ev); }
-  }
+  // Devices are direct household loads. There is no socket, cable, circuit or
+  // automatic-plugging layer between a device and the energy simulation.
+  const electrical = null;
+  const wireRenderer = null;
 
   const automationManager = new AutomationManager({ getInstances: ()=>objectManager.getDevices() });
   let pendingHour = null;
@@ -122,7 +102,7 @@
     getStartDate: ()=> new Date(energySettings.startDateISO || Date.now()),
     automationManager,
     weatherManager,
-    electrical,
+    electrical: null,
     onMinuteTick: (sim)=>{
       if (sim.playing){
         // NOT applied here: at high speed this fires thousands of times per frame. The render-loop hook below
@@ -148,7 +128,7 @@
   const challengeManager = new ChallengeManager({
     simulationEngine, objectManager, analyticsManager, getHouseState:()=>houseState,
   });
-  const homeEnergyManager = new HomeEnergyManager({simulationEngine,analyticsManager,objectManager,electrical,getSettings:()=>energySettings,setSettings:v=>{energySettings=v;},getHouseState:()=>houseState});
+  const homeEnergyManager = new HomeEnergyManager({simulationEngine,analyticsManager,objectManager,electrical:null,getSettings:()=>energySettings,setSettings:v=>{energySettings=v;},getHouseState:()=>houseState});
   const homeOperationsManager = new HomeOperationsManager({simulationEngine,objectManager,getSettings:()=>energySettings,setSettings:v=>{energySettings=v;},getMode:()=>window.EnergyRoom3D?.ui?.experienceMode||'casual'});
 
   const projectManager = new ProjectManager({
@@ -160,14 +140,13 @@
     automationManager,
     simulationEngine,
     rebuildHouse,
-    electrical,
-    onInstallationChanged: ()=>{ wireRenderer.markDirty(); },
+    electrical: null,
   });
 
   const ui = new UIManager({
     sceneManager, roomBuilder, objectManager, transformManager, simulationEngine,
     analyticsManager, automationManager, projectManager, weatherManager, petManager,
-    questManager, advisorEngine, electrical, wireRenderer, challengeManager, homeEnergyManager, homeOperationsManager,
+    questManager, advisorEngine, electrical: null, wireRenderer: null, challengeManager, homeEnergyManager, homeOperationsManager,
     applyLevelView, getBuilding: ()=>building,
     getHouseState: ()=>houseState, setHouseState: (v)=>{ houseState=v; },
     getActiveRoom, getRoom,
@@ -192,17 +171,6 @@
       sceneManager.setDayNight(sceneManager._hour);
       if (window.EnergyRoom3D && window.EnergyRoom3D.ui) window.EnergyRoom3D.ui.updateDayNightLabel(true);
     }
-  });
-  // installation wires: rebuilt only when an element/wire changed (cheap signature, checked ~5x per second)
-  let lastElecSig = '', lastElecCheck = 0;
-  sceneManager.onFrame(()=>{
-    const now = performance.now();
-    if (now - lastElecCheck > 200){
-      lastElecCheck = now;
-      const sig = objectManager.getElectrical().map(e=>e.id+':'+e.position.x.toFixed(2)+','+e.position.y.toFixed(2)+','+e.position.z.toFixed(2)).join('|') + '#' + electrical.data.wires.map(w=>w.id+w.route+(w.damaged?'x':'')).join(',');
-      if (sig !== lastElecSig){ lastElecSig = sig; wireRenderer.markDirty(); }
-    }
-    wireRenderer.update(now);
   });
   environmentBuilder.setSeason(simulationEngine.season);
   sceneManager.setDayNight(simulationEngine.minuteOfDay/60);
@@ -311,13 +279,12 @@
     buildDemoMainRoom();
     buildDemoGarage();
     buildDemoGarden();
-    electrical.load(null); electrical.autoInstall(); wireRenderer.markDirty();
   }
   projectManager.pushHistory();
   simulationEngine._recomputeInstant(false);
 
   ui._focusActiveRoom();
 
-  window.EnergyRoom3D = { getBuilding: ()=>building, applyLevelView, electrical, wireRenderer, shadeModel, sceneManager, roomBuilder, environmentBuilder, objectManager, transformManager, simulationEngine, analyticsManager, automationManager, projectManager, weatherManager, petManager, questManager, advisorEngine, homeOperationsManager, ui, buildDemoMainRoom, buildDemoGarage, buildDemoGarden };
+  window.EnergyRoom3D = { getBuilding: ()=>building, applyLevelView, electrical: null, wireRenderer: null, shadeModel, sceneManager, roomBuilder, environmentBuilder, objectManager, transformManager, simulationEngine, analyticsManager, automationManager, projectManager, weatherManager, petManager, questManager, advisorEngine, homeOperationsManager, ui, buildDemoMainRoom, buildDemoGarage, buildDemoGarden };
   try { if (!localStorage.getItem('energyroom_welcome_done')) ui.openWelcome(); } catch(e) { ui.openWelcome(); }
 })();

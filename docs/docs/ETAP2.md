@@ -1,4 +1,8 @@
-# EnergyRoom 3D – Etap 2 (instalacja elektryczna)
+# EnergyRoom 3D – Etap 2 (archiwalna instalacja elektryczna)
+
+> Ten etap jest obecnie wyłączony w aplikacji 7.13. Urządzenia są bezpośrednimi
+> odbiornikami symulacji i nie wymagają gniazdek, kabli, obwodów ani podłączania.
+> Pozostawione pliki służą wyłącznie kompatybilności ze starszymi testami i zapisami.
 
 ## Łańcuch zasilania (fizyczny model)
 Sieć → licznik → wyłącznik główny → rozdzielnica → zabezpieczenia (MCB) → obwody → przewody → gniazdka → (listwy) → urządzenia.

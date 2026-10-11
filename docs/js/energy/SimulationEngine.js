@@ -249,11 +249,9 @@ class SimulationEngine {
       if (inst.manualOverride === 'off'){
         // user's direct power switch always wins - a forced-off device draws nothing, full stop
         state = 'off'; powerW = 0;
-      } else if (inst.manualOverride === 'on' && inst.connected){
+      } else if (inst.manualOverride === 'on'){
         state = ScheduleManager.dominantState(inst.def);
         powerW = inst.def.states[state] ?? inst.def.ratedPowerW;
-      } else if (inst.manualOverride === 'on' && !inst.connected){
-        state = 'off'; powerW = 0; // can't force-on an unplugged device
       } else {
         const override = inst.runtime.automationOverride;
         if (override && inst.def.states[override.state] != null){
@@ -283,7 +281,6 @@ class SimulationEngine {
     const baseLoadW = wanted.reduce((sum,w,i)=>sum+(instances[i].ev?0:w.powerW),0);
     let evPowerHeadroom=s.importLimitW==null?Infinity:Math.max(0,+s.importLimitW-baseLoadW);
     const batteryAvailableW = this.getBatteryInstances().reduce((sum,b)=>{
-      if(!b.connected) return sum;
       const expansion=typeof HomeEnergyManager!=='undefined'?HomeEnergyManager.batteryCapacityFactor(s):1;
       const cap=b.def.capacityKWh*expansion*Math.max(.5,Math.min(1,(b.storage?.sohPct??100)/100)),reserve=Math.max(+s.batteryReservePct||0,b.storage?.reservePct||0,b.storage?.mode==='backup'?30:0)/100;
       const soc=Math.min(cap,Math.max(0,b.runtime.socKWh??cap*.5));
@@ -293,24 +290,19 @@ class SimulationEngine {
     for(let i=0;i<instances.length;i++){
       const inst=instances[i], ev=inst.ev; if(!ev) continue;
       const scheduled=ScheduleManager.activeIntervalAt(inst.schedule,this.absMin).active;
-      const chargingAllowed=inst.connected && (inst.manualOverride==='on'||(inst.manualOverride!=='off'&&scheduled));
+      const chargingAllowed=inst.manualOverride!=='off'&&scheduled;
       const headroomW=Math.max(0,(ev.capacityKWh*(ev.targetPct/100)-ev.socKWh)*60000);
       let limit=Math.min(inst.def.ratedPowerW||7400,ev.maxPowerW??7400,headroomW);
       limit=Math.min(limit,evPowerHeadroom);
       if(ev.source==='solar') limit=Math.min(limit,Math.max(0,this.currentGenPotentialW-baseLoadW));
       if(ev.source==='battery') limit=Math.min(limit,batteryAvailableW);
       const powerW=chargingAllowed?Math.max(0,limit):0;
-      wanted[i]={state:powerW>0?'charging':(inst.connected?'standby':'off'),powerW};
+      wanted[i]={state:powerW>0?'charging':'standby',powerW};
       evPowerHeadroom=Math.max(0,evPowerHeadroom-powerW);
     }
 
-    // ---- pass 2: the installation decides what actually arrives (sockets, circuits, breakers, cables) ----
+    // Devices draw their scheduled load directly; there is no installation layer.
     let lossW = 0, elec = null;
-    if (this.electrical){
-      elec = this.electrical.resolve(instances.map((inst, i) => ({ id:inst.id, desiredW:wanted[i].powerW, connected:inst.connected, plugTo:inst.plugTo })), { accumulate, publish: !this._bulk });
-      lossW = elec.lossW;
-      if(accumulate&&elec.events)this.electricalTripCount+=elec.events.filter(x=>['breakerTrip','mainTrip','stripTrip','cableOverheat'].includes(x.type)).length;
-    }
     evGridW=0; evBatteryW=0;
     for(let i=0;i<instances.length;i++) if(instances[i].ev){
       const er=elec&&elec.devices.get(instances[i].id), actualW=er?er.powerW:wanted[i].powerW;

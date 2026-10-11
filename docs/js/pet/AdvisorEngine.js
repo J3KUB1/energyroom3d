@@ -23,7 +23,7 @@ class AdvisorEngine {
 
     // 1) a currently-running device is sitting in the tariff's most expensive band (spec example #1)
     if (!TariffManager.isFlat(s.tariffCode) && this._cooldownOk('expensive_device', absMin, 180)){
-      const running = instances.filter(i=> i.connected && i.runtime.state && i.runtime.state!=='off' && i.runtime.state!=='standby' && i.runtime.powerW>200);
+      const running = instances.filter(i=> i.runtime.state && i.runtime.state!=='off' && i.runtime.state!=='standby' && i.runtime.powerW>200);
       if (running.length && EnergyCalculator.isExpensiveRateAt(absMin, s)){
         const worst = running.sort((a,b)=>b.runtime.powerW-a.runtime.powerW)[0];
         const tariff = TariffManager.get(s.tariffCode);

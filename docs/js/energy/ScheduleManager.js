@@ -184,11 +184,10 @@ const ScheduleManager = {
   /**
    * Resolve device state + power at absolute simulated minute `absMin`.
    * Returns {state, powerW}. `inst` is the placed device instance
-   * (has .def, .schedule, .connected, .runtime{}).
+   * (has .def, .schedule, .runtime{}).
    */
   resolve(inst, absMin){
     const def = inst.def;
-    if (!inst.connected) return { state:'off', powerW:0 };
     const schedule = this.normalizeShared(inst.schedule, def);
 
     if (def.profileType === 'always'){

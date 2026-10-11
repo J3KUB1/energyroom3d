@@ -85,22 +85,20 @@ class ProjectManager {
     if (Array.isArray(json.objects)){
       for (const o of json.objects){
         try {
+          if (o.kind === 'electrical') continue;
           const roomId = o.roomId || 'main';
           const inst = o.kind==='furniture' ? this.om.addFurniture(o.defId, o.position, roomId)
                      : o.kind==='solar'      ? this.om.addSolar(o.defId, o.position, roomId, o.slope)
                      : o.kind==='battery'     ? this.om.addBattery(o.defId, o.position, roomId)
-                     : o.kind==='electrical'  ? this.om.addElectrical(o.defId, o.position, roomId)
                                               : this.om.addDevice(o.defId, o.position, roomId);
           if (!inst) continue;
           if (o.id) idMap[o.id] = inst.id;
-          if (o.kind==='electrical'){ inst.circuitId = o.circuitId || null; inst.enabled = o.enabled !== false; inst.plugTo = o.plugTo || null; }
-          else if (o.kind==='device') inst.plugTo = o.plugTo || null;
           if (o.ev && inst.ev) inst.ev = Object.assign(inst.ev,o.ev);
           if(o.storage&&inst.storage)inst.storage=Object.assign(inst.storage,o.storage);
           if(o.kind==='solar')inst.runtime.faulted=!!o.pvFaulted;
           this.om.applyTransform(inst.id, o.position||{x:0,y:0,z:0}, o.rotation||{x:0,y:0,z:0}, o.scale||{x:1,y:1,z:1});
           if (o.customName) this.om.rename(inst.id, o.customName);
-          if (typeof o.connected === 'boolean') this.om.setConnected(inst.id, o.connected);
+          if (typeof o.connected === 'boolean' && o.kind !== 'device') this.om.setConnected(inst.id, o.connected);
           if (o.manualOverride) this.om.setManualOverride(inst.id, o.manualOverride);
           if (o.schedule) this.om.setSchedule(inst.id, o.schedule);
           if (o.kind==='battery' && typeof o.socKWh === 'number') inst.runtime.socKWh = o.socKWh;

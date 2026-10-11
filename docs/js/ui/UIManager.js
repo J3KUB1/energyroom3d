@@ -6,6 +6,10 @@
  * Toolkit would replace it) - everything it calls into is portable.
  */
 class UIManager {
+  static esc(value){
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+
   constructor(ctx){
     Object.assign(this, ctx);
     // ctx = { sceneManager, roomBuilder, objectManager, transformManager,
@@ -31,12 +35,12 @@ class UIManager {
     this._bindRoomTabs();
     this._bindViewportToolbar();
     this._bindMobileNav();
+    this._bindMobileActions();
     this._bindDashboard();
     this._bindRoomSettings();
     this._bindSmartHome();
     this._bindSettingsModal();
     this._bindEduModal();
-    this._bindLogPanel();
     this._bindKeyboard();
     this._bindTutorial();
     this._bindModalGeneric();
@@ -44,16 +48,19 @@ class UIManager {
     this._bindPvInstallMode();
     this._bindScheduleModal();
     this._bindNewSimModal();
-    this._bindInstallation();
     this._bindDesigner();
     this._bindWelcomeModal();
+    this._bindKidsLessons();
     this._bindChallenges();
     this._bindHomeEnergy();
     this._bindHomeOperations();
     this._bindEnergyMonitor();
     this._applyRealismMode();
 
-    this.transformManager.onSelect = (inst)=>this.renderProperties(inst);
+    this.transformManager.onSelect = (inst)=>{
+      this.renderProperties(inst);
+      if (inst && this.experienceMode==='kids') this._showKidsContextHint(inst);
+    };
     this.transformManager.onHover = (inst,e)=>this.renderTooltip(inst,e);
     this.transformManager.onTransformCommit = (inst)=>{ this.renderProperties(inst, true); this.projectManager.pushHistory(); };
     this.transformManager.onToggle = (id)=>this._quickTogglePower(id);
@@ -139,6 +146,9 @@ class UIManager {
     document.getElementById('playPauseBtn').addEventListener('click', ()=>{
       this.simulationEngine.toggle();
       document.getElementById('playPauseBtn').textContent = this.simulationEngine.playing ? '⏸' : '▶';
+      if(this.experienceMode==='kids' && this.simulationEngine.playing){
+        this.toast(I18n.t('kids.simulationHint'));
+      }
     });
     document.getElementById('speedSelect').addEventListener('change', (e)=>{
       this.simulationEngine.setSpeed(Number(e.target.value));
@@ -152,7 +162,6 @@ class UIManager {
     document.getElementById('btnLoad').addEventListener('click', ()=>{ this.projectManager.loadLocal(); this.transformManager.deselect(); this.renderRoomTabs(); });
     document.getElementById('btnRoomSettings').addEventListener('click', ()=>this.openRoomSettings());
     document.getElementById('btnSmartHome').addEventListener('click', ()=>this.openSmartHome());
-    document.getElementById('btnInstallation').addEventListener('click', ()=>this.openInstallation());
     document.getElementById('btnDesigner').addEventListener('click', ()=>this.toggleDesigner());
     document.getElementById('btnDashboard').addEventListener('click', ()=>this.openDashboard());
     document.getElementById('btnDayPlanner').addEventListener('click', ()=>this._openDayPlanner());
@@ -198,6 +207,45 @@ class UIManager {
     document.getElementById('welcomeStart').addEventListener('click', ()=>this._finishWelcome(true));
     document.getElementById('welcomeSkip').addEventListener('click', ()=>this._finishWelcome(false));
     document.getElementById('welcomeClose').addEventListener('click', ()=>this._finishWelcome(false));
+    document.querySelectorAll('[data-welcome-mode]').forEach(btn=>btn.addEventListener('click',()=>{
+      document.getElementById('welcomeMode').value=btn.dataset.welcomeMode;
+      if(btn.dataset.welcomeMode==='kids') this.toast(I18n.t('welcome.quickLearnHint'));
+      else this.toast(I18n.t('welcome.quickBuildHint'));
+    }));
+  }
+
+  _bindMobileActions(){
+    document.querySelectorAll('[data-mobile-action]').forEach(btn=>btn.addEventListener('click',()=>{
+      const action=btn.dataset.mobileAction;
+      if(action==='assets') document.getElementById('btnMobileAssets').click();
+      else if(action==='properties') document.getElementById('btnMobileProps').click();
+      else if(action==='focus') this._focusSelected();
+      else if(action==='duplicate') this._duplicateSelected();
+      else if(action==='delete') this._deleteSelected();
+    }));
+  }
+
+  _showKidsContextHint(inst){
+    const name=inst.customName||I18n.deviceName(inst.def);
+    const watts=EnergyCalculator.fmtW(inst.def.ratedPowerW||0);
+    this.toast(I18n.t('kids.contextHint',{name,power:watts}));
+  }
+
+  _renderKidsLessons(){
+    const lessons=[
+      ['💡','kids.lessonPowerTitle','kids.lessonPowerText'],
+      ['☀️','kids.lessonSolarTitle','kids.lessonSolarText'],
+      ['🔋','kids.lessonBatteryTitle','kids.lessonBatteryText'],
+      ['🌱','kids.lessonSavingTitle','kids.lessonSavingText'],
+    ];
+    const root=document.getElementById('kidsLessonsGrid');
+    if(root)root.innerHTML=lessons.map(([icon,title,text])=>`<article class="kids-lesson-card"><span>${icon}</span><b>${I18n.t(title)}</b><p>${I18n.t(text)}</p></article>`).join('');
+  }
+
+  _bindKidsLessons(){
+    const btn=document.getElementById('btnKidsLessons');
+    if(!btn)return;
+    btn.addEventListener('click',()=>{this._renderKidsLessons();this._closeAllModals();document.getElementById('kidsLessonsModal').classList.remove('hidden');});
   }
 
   openWelcome(){
@@ -536,13 +584,7 @@ class UIManager {
         card.className = 'asset-card';
         const price = def.priceZl + def.laborZl;
         card.innerHTML = `<div class="asset-icon">${ELICONS[def.id]||'⚡'}</div><div class="asset-name">${I18n.deviceName(def)}</div><div class="asset-power" style="color:var(--accent-power)">${price>0 ? I18n.num(price,0)+' zł' : I18n.t('elec.operatorOwned')}</div>`;
-        card.addEventListener('click', ()=>{
-          this._placeElectrical(def.id);
-          if (this.isMobile()){
-            document.getElementById('leftPanel').classList.remove('mobile-open');
-            this._syncMobileNavState();
-          }
-        });
+        card.addEventListener('click', ()=>{ this._placeElectrical(def.id); if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open'); });
         grid.appendChild(card);
       }
       return;
@@ -572,15 +614,7 @@ class UIManager {
       if (!room || room.id==='__all__'){ this.toast(I18n.t('msg.pickRoomObject')); return; }
       const pos = { x: room.settings.width/2, y:0, z: room.settings.length/2 };
       const inst = isFurniture ? this.objectManager.addFurniture(defId,pos,room.id) : this.objectManager.addDevice(defId,pos,room.id);
-      if (inst){
-        this.transformManager.select(inst.id);
-        this.projectManager.pushHistory();
-        this.log(I18n.t('log.added', { name: I18n.deviceName(inst.def) }));
-        if (this.isMobile()){
-          document.getElementById('leftPanel').classList.remove('mobile-open');
-          this._syncMobileNavState();
-        }
-      }
+      if (inst){ this.transformManager.select(inst.id); this.projectManager.pushHistory(); this.log(I18n.t('log.added', { name: I18n.deviceName(inst.def) })); if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open'); }
     });
     return card;
   }
@@ -622,10 +656,7 @@ class UIManager {
     this.petManager.awardPVInstalled(totalPanels);
     this.questManager.checkMilestones(this._questCtx());
     if (this.pvInstallMode) this._refreshPvInstallBanner();
-    if (this.isMobile()){
-      document.getElementById('leftPanel').classList.remove('mobile-open');
-      this._syncMobileNavState();
-    }
+    if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open');
   }
 
   _placeBattery(defId){
@@ -638,10 +669,7 @@ class UIManager {
     this.projectManager.pushHistory();
     this.log(I18n.t('log.batteryAdded', { name: I18n.deviceName(inst.def) }));
     this.questManager.checkMilestones(this._questCtx());
-    if (this.isMobile()){
-      document.getElementById('leftPanel').classList.remove('mobile-open');
-      this._syncMobileNavState();
-    }
+    if (this.isMobile()) document.getElementById('leftPanel').classList.remove('mobile-open');
   }
 
   // ============================================================
@@ -827,79 +855,19 @@ class UIManager {
   _bindMobileNav(){
     const left = document.getElementById('leftPanel'), right = document.getElementById('rightPanel');
     const scrim = document.getElementById('mobileScrim');
-    const assetsButton = document.getElementById('btnMobileAssets');
-    const propsButton = document.getElementById('btnMobileProps');
-    this._mobileDrawerTrigger = null;
-    const syncState = (focusOpenPanel=false)=>{
-      if (!this.isMobile()){
-        left.classList.remove('mobile-open');
-        right.classList.remove('mobile-open');
-      }
-      const assetsOpen = left.classList.contains('mobile-open');
-      const propsOpen = right.classList.contains('mobile-open');
-      assetsButton.setAttribute('aria-expanded', String(assetsOpen));
-      propsButton.setAttribute('aria-expanded', String(propsOpen));
-      const hasOpenDrawer = assetsOpen || propsOpen;
-      left.inert = this.isMobile() && !assetsOpen;
-      right.inert = this.isMobile() && !propsOpen;
-      left.setAttribute('aria-hidden', String(this.isMobile() && !assetsOpen));
-      right.setAttribute('aria-hidden', String(this.isMobile() && !propsOpen));
-      scrim.classList.toggle('hidden', !hasOpenDrawer);
-      scrim.setAttribute('aria-hidden', String(!hasOpenDrawer));
-      if (focusOpenPanel){
-        (assetsOpen ? left : right).focus({preventScroll:true});
-      }
-    };
-    const closeDrawers = (restoreFocus=true)=>{
-      const wasOpen = left.classList.contains('mobile-open') || right.classList.contains('mobile-open');
-      left.classList.remove('mobile-open');
-      right.classList.remove('mobile-open');
-      syncState();
-      if (restoreFocus && wasOpen && this._mobileDrawerTrigger?.isConnected) this._mobileDrawerTrigger.focus({preventScroll:true});
-      this._mobileDrawerTrigger = null;
-    };
-    const trapFocus = panel => event=>{
-      if (event.key!=='Tab' || !panel.classList.contains('mobile-open')) return;
-      const focusable = [...panel.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
-        .filter(element=>!element.hidden && element.getAttribute('aria-hidden')!=='true' && element.getClientRects().length>0);
-      if (!focusable.length){ event.preventDefault(); panel.focus(); return; }
-      const first = focusable[0], last = focusable[focusable.length-1];
-      if (!panel.contains(document.activeElement)){
-        event.preventDefault(); (event.shiftKey ? last : first).focus();
-      } else if (event.shiftKey && (document.activeElement===first || document.activeElement===panel)){
-        event.preventDefault(); last.focus();
-      } else if (!event.shiftKey && (document.activeElement===last || document.activeElement===panel)){
-        event.preventDefault(); first.focus();
-      }
-    };
-    document.addEventListener('keydown', event=>{
-      const openPanel = left.classList.contains('mobile-open') ? left :
-        (right.classList.contains('mobile-open') ? right : null);
-      if (openPanel) trapFocus(openPanel)(event);
-    });
-    assetsButton.addEventListener('click', ()=>{
+    const closeDrawers = ()=>{ left.classList.remove('mobile-open'); right.classList.remove('mobile-open'); scrim.classList.add('hidden'); };
+    document.getElementById('btnMobileAssets').addEventListener('click', ()=>{
       const opening = !left.classList.contains('mobile-open');
-      closeDrawers(false);
-      if (opening){
-        this._mobileDrawerTrigger = assetsButton;
-        left.classList.add('mobile-open');
-        syncState(true);
-      }
+      closeDrawers();
+      if (opening){ left.classList.add('mobile-open'); scrim.classList.remove('hidden'); }
     });
-    propsButton.addEventListener('click', ()=>{
+    document.getElementById('btnMobileProps').addEventListener('click', ()=>{
       const opening = !right.classList.contains('mobile-open');
-      closeDrawers(false);
-      if (opening){
-        this._mobileDrawerTrigger = propsButton;
-        right.classList.add('mobile-open');
-        syncState(true);
-      }
+      closeDrawers();
+      if (opening){ right.classList.add('mobile-open'); scrim.classList.remove('hidden'); }
     });
     scrim.addEventListener('click', closeDrawers);
-    window.addEventListener('resize', ()=>syncState());
-    this._syncMobileNavState = syncState;
     this._closeMobileDrawers = closeDrawers;
-    syncState();
   }
 
   _focusSelected(){ const inst=this.objectManager.find(this.transformManager.selectedId); if (inst) this.sceneManager.focusOn(inst.group); }
@@ -923,7 +891,7 @@ class UIManager {
   _bindKeyboard(){
     document.addEventListener('keydown', (e)=>{
       const tag = (e.target.tagName||'').toLowerCase();
-      if ((tag==='input' || tag==='select' || tag==='textarea') && e.key!=='Escape') return;
+      if (tag==='input' || tag==='select' || tag==='textarea') return;
       if (e.key==='Delete' || e.key==='Backspace'){ e.preventDefault(); this._deleteSelected(); }
       else if (e.ctrlKey && e.key.toLowerCase()==='d'){ e.preventDefault(); this._duplicateSelected(); }
       else if (e.ctrlKey && e.key.toLowerCase()==='z'){ e.preventDefault(); this.projectManager.undo(); }
@@ -933,11 +901,7 @@ class UIManager {
       else if (e.key.toLowerCase()==='r'){ this._setGizmoMode('scale'); }
       else if (e.key.toLowerCase()==='f'){ this._focusSelected(); }
       else if (e.key.toLowerCase()==='g'){ const c=document.getElementById('chkGrid'); c.checked=!c.checked; this.roomBuilder.setGridVisible(c.checked); }
-      else if (e.key==='Escape'){
-        const drawerOpen = document.querySelector('#leftPanel.mobile-open, #rightPanel.mobile-open');
-        if (drawerOpen){ this._closeMobileDrawers(); return; }
-        this.transformManager.deselect(); this._closeAllModals();
-      }
+      else if (e.key==='Escape'){ this.transformManager.deselect(); this._closeAllModals(); }
       else if (e.key===' '){ e.preventDefault(); if (this.currentMode==='sim'){ document.getElementById('playPauseBtn').click(); } }
     });
   }
@@ -976,7 +940,7 @@ class UIManager {
     }
     if (inst.kind==='electrical'){
       const live = inst.runtime.state==='live';
-      tip.innerHTML = `<b>${InstallationPanel.esc(inst.customName||I18n.deviceName(inst.def))}</b>
+      tip.innerHTML = `<b>${UIManager.esc(inst.customName||I18n.deviceName(inst.def))}</b>
         <div class="t-row"><span>${I18n.t('ui.state')}</span><b style="color:${live?'var(--accent-good)':'var(--accent-danger)'}">${live ? I18n.t('elec.status.live') : I18n.t('elec.status.'+(inst.runtime.status||'noSupply'))}</b></div>
         ${inst.def.type==='socket' || inst.def.type==='strip' ? `<div class="t-row"><span>${I18n.t('elec.current')}</span><b>${I18n.num(inst.runtime.currentA||0,2)} A</b></div>` : ''}`;
       return;
@@ -1001,8 +965,7 @@ class UIManager {
     if (this.isMobile() && !transformOnly){
       document.getElementById('leftPanel').classList.remove('mobile-open');
       document.getElementById('rightPanel').classList.add('mobile-open');
-      this._mobileDrawerTrigger = document.getElementById('btnMobileProps');
-      this._syncMobileNavState(true);
+      document.getElementById('mobileScrim').classList.remove('hidden');
     }
 
     if (transformOnly && this._lastRenderedId===inst.id){
@@ -1015,7 +978,7 @@ class UIManager {
     const isSolar = inst.kind==='solar';
     const isBattery = inst.kind==='battery';
     const isElectrical = inst.kind==='electrical';
-    let html = `<input class="prop-name-input" id="propNameInput" value="${InstallationPanel.esc(inst.customName||I18n.deviceName(inst.def))}">`;
+    let html = `<input class="prop-name-input" id="propNameInput" value="${UIManager.esc(inst.customName||I18n.deviceName(inst.def))}">`;
 
     if (isBattery){
       const def = inst.def;
@@ -1112,11 +1075,7 @@ class UIManager {
         </span></div>
         <div class="prop-row"><span class="lbl">${I18n.t('ui.energy_today')}</span><span class="val">${EnergyCalculator.fmtKWh(dailyKWh)}</span></div>
         <div class="prop-row"><span class="lbl">${I18n.t('tariff.currentRate')}</span><span class="val">${rate.toFixed(2)} ${s.currency}/kWh ${EnergyCalculator.isCheapRateAt(this.simulationEngine.absMin,s)?'🟢':EnergyCalculator.isExpensiveRateAt(this.simulationEngine.absMin,s)?'🔴':''} <span class="tariff-code-pill">${s.tariffCode}</span></span></div>
-        ${this._deviceSupplyHtml(inst)}
         ${inst.ev?this._evChargePanelHtml(inst,s,rate):''}
-        <div class="toggle-row"><span class="lbl">${I18n.t('ui.plugged_into_a_socket')}</span>
-          <label class="switch"><input type="checkbox" id="propConnected" ${inst.connected?'checked':''}><span class="slider-tog"></span></label>
-        </div>
         <div style="margin-top:6px">${dsBadge}</div>
         <button class="small-btn edu-btn" id="propEduBtn">${I18n.t('ui.how_does_energy_consumption_work')}</button>
       </div>`;
@@ -1178,11 +1137,10 @@ class UIManager {
         this.projectManager.pushHistory();
       });
     });
-    if (isDevice || isSolar || isBattery){
+    if (isSolar || isBattery){
       const connEl = document.getElementById('propConnected');
       if (connEl) connEl.addEventListener('change', (e)=>{ this.objectManager.setConnected(inst.id, e.target.checked); this._nudgeSim(); this.projectManager.pushHistory(); });
     }
-    if (isDevice) this._bindDeviceSupply(inst);
     if (isDevice && inst.ev) this._bindEvControls(inst);
     if (isBattery) this._bindBatteryControls(inst);
     if (isSolar) document.getElementById('pvFaultToggle').addEventListener('change',e=>{inst.runtime.faulted=e.target.checked;this._nudgeSim();this.projectManager.pushHistory();this.renderProperties(inst);});
@@ -1239,8 +1197,6 @@ class UIManager {
     if (kind === 'levelView'){ this.applyLevelView(); this.renderRoomTabs(); return; }
     if (kind === 'openState'){ this.projectManager.pushHistory(); return; }
     this.rebuildHouse();
-    this._fitElectricalToRooms();
-    this.electrical.prune();
     this.projectManager.pushHistory();
     this.renderRoomTabs();
     this._nudgeSim();
@@ -1556,6 +1512,11 @@ class UIManager {
     const facts=['kids.factSolar','kids.factBattery','kids.factStandby','kids.factHeat','kids.factExport'];
     this._kidsFactIndex=((this._kidsFactIndex%facts.length)+facts.length)%facts.length;
     el.textContent=I18n.t(facts[this._kidsFactIndex]);this._kidsFactChangedAt=now;
+    const used=Math.max(0,this.simulationEngine.todayKWh||0), target=1;
+    const fill=document.getElementById('kidsGoalFill'), value=document.getElementById('kidsGoalValue'), text=document.getElementById('kidsGoalText');
+    if(fill)fill.style.width=Math.min(100,used/target*100)+'%';
+    if(value)value.textContent=`${used.toFixed(2)} / ${target.toFixed(0)} kWh`;
+    if(text)text.textContent=I18n.t(used>=target?'kids.goalDone':'kids.goalText');
   }
 
   // ============================================================
@@ -1626,7 +1587,6 @@ class UIManager {
     const sim = this.simulationEngine;
     const proj = this.analyticsManager.projections(sim.todayKWh, sim.todaySolarKWh, sim.todayCost);
     const s = this.getEnergySettings();
-    const inst = this.electrical.costBreakdown();     // one-off wiring cost + its yearly amortisation feed the project economics
     const cards = [
       { key:'power', l:I18n.t('chart.currentPower'), v:EnergyCalculator.fmtW(sim.currentPowerW), cls:'power' },
       { key:'gen', l:I18n.t('footer.pvProduction'), v:'+'+EnergyCalculator.fmtW(sim.currentGenW), cls:'good' },
@@ -1637,8 +1597,6 @@ class UIManager {
       { key:'year', l:I18n.t('common.year')+' ('+I18n.t('common.estimate')+')', v:Math.round(proj.year)+' kWh', cls:null },
       { key:'co2', l:'CO₂ / '+I18n.t('common.year')+' ('+I18n.t('stats.reduction')+')', v:Math.round(proj.co2AvoidedYear)+' kg', cls:'good' },
       { key:'lifetime', l:I18n.t('stats.lifetimeSavings'), v:EnergyCalculator.fmtCost(sim.totalSavedPLN,s.currency), cls:'good' },
-      { key:'installCost', l:I18n.t('elec.dash.installCost'), v:EnergyCalculator.fmtCost(inst.totalZl,s.currency), cls:null },
-      { key:'projectYear', l:I18n.t('elec.dash.projectYear'), v:EnergyCalculator.fmtCost(proj.yearCost+inst.amortizedPerYearZl,s.currency), cls:null },
     ];
     document.getElementById('dashCards').innerHTML = cards.map(c=>`<div class="dash-card ${c.cls?('dc-'+c.cls):''}" data-key="${c.key}"><div class="dc-label">${c.l}</div><div class="dc-value">${c.v}</div></div>`).join('');
     document.querySelectorAll('#dashCards .dash-card').forEach(el=>{
@@ -1707,15 +1665,6 @@ class UIManager {
     } else if (key==='year' || key==='co2'){
       title = `${I18n.t('common.year')} ${y}`;
       body = yb.months.map(mo=>rows(`${mo.label}${mo.isProjected?' ('+I18n.t('common.estimate')+')':''}`, EnergyCalculator.fmtKWh(mo.consumedKWh))).join('');
-    } else if (key==='installCost' || key==='projectYear'){
-      const ic = this.electrical.costBreakdown();
-      title = I18n.t('elec.dash.economics');
-      body = rows(I18n.t('elec.dash.energyYear'), EnergyCalculator.fmtCost(proj.yearCost, s.currency))
-        + rows(I18n.t('elec.dash.installAmortized', { years: ELECTRICAL_CONSTANTS.designLifeYears }), EnergyCalculator.fmtCost(ic.amortizedPerYearZl, s.currency))
-        + rows(I18n.t('elec.dash.projectYear'), EnergyCalculator.fmtCost(proj.yearCost + ic.amortizedPerYearZl, s.currency))
-        + rows(I18n.t('elec.dash.installCost'), EnergyCalculator.fmtCost(ic.totalZl, s.currency))
-        + rows(I18n.t('elec.dash.cableLength'), I18n.num(ic.cableM, 1) + ' m')
-        + rows(I18n.t('elec.dash.lossesToday'), EnergyCalculator.fmtKWh(sim.todayLossKWh || 0));
     } else if (key==='lifetime'){
       title = I18n.t('stats.lifetimeSavings');
       body = rows(I18n.t('common.since'), EnergyCalculator.fmtCost(sim.totalSavedPLN, s.currency))
@@ -2094,9 +2043,6 @@ class UIManager {
     house.activeRoomId = id; house.activeLevelId = room.levelId;
     this.setHouseState(house);
     this.rebuildHouse();
-    // a new room gets real sockets on a socket circuit, wired to the switchboard, like every other room
-    this.electrical.ensureRoom({ id, name, type, offsetX:room.offsetX, offsetZ:room.offsetZ, elevation:BuildingModel.elevation(house, room), width:room.settings.width, length:room.settings.length, height:room.settings.height });
-    this.electrical.autoWire(); this.wireRenderer.markDirty();
     this.projectManager.pushHistory();
     this.renderRoomTabs();
     this.toast(`${meta.icon} ${I18n.t('log.roomAdded', { name })}`);
@@ -2120,9 +2066,7 @@ class UIManager {
     BuildingModel.autoLayout(house);                    // re-pack (only while the layout is still the automatic one)
     house.stairs = house.stairs.filter(s=>s.roomId!==roomId);
     if (house.activeRoomId === roomId){ house.activeRoomId = house.rooms[0].id; house.activeLevelId = house.rooms[0].levelId; }
-    this.electrical.dropRoomCircuits(roomId);           // circuits that only served this room disappear with it
     this.objectManager.removeRoomGroup(roomId);
-    this.electrical.prune(); this.wireRenderer.markDirty();
     this.setHouseState(house);
     this.rebuildHouse();
     this.projectManager.pushHistory();
@@ -2515,24 +2459,8 @@ class UIManager {
     document.getElementById('eduModal').classList.remove('hidden');
   }
 
-  // ============================================================
-  // DEBUG LOG PANEL
-  // ============================================================
-  _bindLogPanel(){
-    document.getElementById('btnToggleLog').addEventListener('click', ()=> document.getElementById('logPanel').classList.toggle('hidden'));
-    document.getElementById('closeLog').addEventListener('click', ()=> document.getElementById('logPanel').classList.add('hidden'));
-  }
-  log(msg){
-    const body = document.getElementById('logBody');
-    if (!body) return;
-    const line = document.createElement('div');
-    line.className='log-line';
-    const t = this.simulationEngine ? this.simulationEngine.clockLabel : '';
-    line.innerHTML = `<span class="log-time">[${t}]</span>${msg}`;
-    body.appendChild(line);
-    body.scrollTop = body.scrollHeight;
-    while (body.children.length>200) body.removeChild(body.firstChild);
-  }
+  // Kept as a compatibility hook for managers that still emit status messages.
+  log(_msg){}
 
   // ============================================================
   // TUTORIAL
@@ -2740,11 +2668,7 @@ class UIManager {
       if (garage) this.setActiveRoom(garage.id);   // any room whose roof can carry panels (mono-pitch / gable)
       this.currentCategory = 'solar';
       this.renderCategoryTabs(); this.renderAssetGrid();
-      if (this.isMobile()){
-        document.getElementById('leftPanel').classList.add('mobile-open');
-        this._mobileDrawerTrigger = document.getElementById('btnMobileAssets');
-        this._syncMobileNavState(true);
-      }
+      if (this.isMobile()) document.getElementById('leftPanel').classList.add('mobile-open');
       this._refreshPvInstallBanner();
     } else {
       this._checkAchievements();
