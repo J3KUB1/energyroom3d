@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>EnergyRoom 3D</title>
 <meta name="description" content="Interaktywny symulator 3D zużycia energii — pokój, garaż i panele fotowoltaiczne.">
 <meta name="theme-color" content="#0d121a">
@@ -78,7 +78,6 @@
       <button class="tb-btn" id="btnReport" data-i18n-title="energy.report">📑 <span class="tb-label" data-i18n="energy.report">Raport</span></button>
       <button class="tb-btn advanced-feature kids-hidden" id="btnPvInstall" title="PV install" data-i18n-title="pv.installMode">☀ <span class="tb-label" data-i18n="pv.installMode">Instalacja PV</span></button>
       <button class="tb-btn advanced-feature kids-hidden" id="btnDesigner" title="Projektant domu" data-i18n-title="bld.tip.open">🏗 <span class="tb-label" data-i18n="bld.btn">Projektant</span></button>
-      <button class="tb-btn advanced-feature kids-hidden" id="btnInstallation" title="Instalacja elektryczna" data-i18n-title="elec.tip.open">⚡ <span class="tb-label" data-i18n="elec.title">Instalacja</span></button>
       <button class="tb-btn" id="btnSettings" title="Ustawienia" data-i18n-title="ui.tip.settings">⚙</button>
       <button class="tb-btn" id="btnWelcome" title="Instrukcja" data-i18n-title="welcome.helpTitle">ⓘ</button>
     </div>
@@ -102,9 +101,9 @@
   <div id="main">
 
     <!-- LEFT: asset panel -->
-    <aside id="leftPanel" aria-labelledby="assetPanelTitle" tabindex="-1">
+    <aside id="leftPanel">
       <div class="panel-context">
-        <div class="panel-context-title" id="assetPanelTitle" data-i18n="ui.library.title">Dodaj do pomieszczenia</div>
+        <div class="panel-context-title" data-i18n="ui.library.title">Dodaj do pomieszczenia</div>
         <div class="panel-context-room" id="assetRoomName">Sypialnia</div>
         <div class="panel-context-hint" id="assetRoomHint" data-i18n="ui.library.help">Wybierz kategorię, a potem kliknij element, aby go dodać.</div>
       </div>
@@ -115,6 +114,12 @@
         <div class="kids-fact-row"><b>kWh</b><span data-i18n="kids.factKwh">Energia: ile zużyło się przez pewien czas.</span></div>
         <div class="kids-dynamic-fact"><span aria-hidden="true">💡</span><p id="kidsDynamicFact"></p></div>
         <button class="kids-fact-next" id="kidsNextFact" data-i18n="kids.factNext">Następna ciekawostka</button>
+        <div class="kids-goal" aria-live="polite">
+          <div class="kids-goal-head"><b data-i18n="kids.goalTitle">Dzisiejsza misja</b><span id="kidsGoalValue">0 / 1 kWh</span></div>
+          <div class="kids-goal-track"><i id="kidsGoalFill"></i></div>
+          <small id="kidsGoalText" data-i18n="kids.goalText">Uruchom symulację i obserwuj, jak rośnie zużycie.</small>
+        </div>
+        <button class="kids-challenge-btn kids-lessons-btn" id="btnKidsLessons" data-i18n="kids.lessonsButton">📚 Mini-lekcje</button>
         <button class="kids-challenge-btn" id="btnKidsLesson" data-i18n="kids.lessonButton">🎯 Otwórz przewodnik</button>
       </section>
       <div class="panel-tabs" id="categoryTabs"></div>
@@ -126,9 +131,16 @@
       <div id="threeContainer"></div>
 
       <!-- Mobile-only: toggles for the asset/properties drawers (hidden on desktop via CSS) -->
-      <button id="btnMobileAssets" class="mobile-fab left" title="Assety" data-i18n-title="ui.tip.assets" aria-expanded="false" aria-controls="leftPanel">☰<span data-i18n="ui.panel.assets">Assety</span></button>
-      <button id="btnMobileProps" class="mobile-fab right" title="Właściwości" data-i18n-title="ui.tip.properties" aria-expanded="false" aria-controls="rightPanel">ℹ<span data-i18n="ui.panel.properties">Właściwości</span></button>
-      <div id="mobileScrim" class="mobile-scrim hidden" aria-hidden="true"></div>
+      <button id="btnMobileAssets" class="mobile-fab left" title="Assety" data-i18n-title="ui.tip.assets">☰<span data-i18n="ui.panel.assets">Assety</span></button>
+      <button id="btnMobileProps" class="mobile-fab right" title="Właściwości" data-i18n-title="ui.tip.properties">ℹ<span data-i18n="ui.panel.properties">Właściwości</span></button>
+      <nav class="mobile-action-bar" id="mobileActionBar" aria-label="Mobile actions">
+        <button type="button" data-mobile-action="assets">☰<span data-i18n="ui.panel.assets">Assety</span></button>
+        <button type="button" data-mobile-action="properties">ℹ<span data-i18n="ui.panel.properties">Właściwości</span></button>
+        <button type="button" data-mobile-action="focus">🎯<span data-i18n="ui.tip.focus">Centruj</span></button>
+        <button type="button" data-mobile-action="duplicate">⧉<span data-i18n="ui.tip.duplicate">Duplikuj</span></button>
+        <button type="button" data-mobile-action="delete">🗑<span data-i18n="ui.tip.delete">Usuń</span></button>
+      </nav>
+      <div id="mobileScrim" class="mobile-scrim hidden"></div>
 
       <div class="viewport-toolbar">
         <div class="tool-group" id="gizmoModeGroup">
@@ -229,7 +241,7 @@
     </section>
 
     <!-- RIGHT: properties panel -->
-    <aside id="rightPanel" aria-labelledby="btnMobileProps" tabindex="-1">
+    <aside id="rightPanel">
       <div id="propEmpty" class="prop-empty" data-i18n="ui.props.empty">Zaznacz obiekt w scenie, aby zobaczyć jego właściwości.</div>
       <div id="propContent" class="hidden"></div>
     </aside>
@@ -353,13 +365,6 @@
 <!-- ============ SMART HOME MODAL ============ -->
 <aside id="designerDock" class="designer-dock hidden" aria-label="House designer"><div id="designerBody"></div></aside>
 
-<div class="modal-backdrop hidden" id="installModal">
-  <div class="modal wide">
-    <div class="modal-header"><h2 data-i18n="elec.modalTitle">Instalacja elektryczna</h2><button class="modal-close" data-close="installModal">✕</button></div>
-    <div class="modal-body" id="installBody"></div>
-  </div>
-</div>
-
 <div class="modal-backdrop hidden" id="smartHomeModal">
   <div class="modal wide">
     <div class="modal-header"><h2 data-i18n="ui.smart.title">Smart Home — Automatyzacje</h2><button class="modal-close" data-close="smartHomeModal">✕</button></div>
@@ -405,6 +410,10 @@
         <label><span data-i18n="welcome.price">Cena prądu</span><div class="welcome-price"><input id="welcomePrice" class="std-input" type="number" min="0.01" max="20" step="0.01"><span data-i18n="welcome.priceUnit">PLN/kWh</span></div></label>
         <label class="welcome-pet"><span data-i18n="welcome.petName">Imię zwierzaka</span><input id="welcomePetName" class="std-input" maxlength="24"></label>
       </div>
+      <div class="welcome-quick-modes" aria-label="Quick start">
+        <button type="button" data-welcome-mode="casual">🏠 <span data-i18n="welcome.quickBuild">Zbuduj dom</span></button>
+        <button type="button" data-welcome-mode="kids">🌟 <span data-i18n="welcome.quickLearn">Naucz się</span></button>
+      </div>
       <h3 class="welcome-how" data-i18n="welcome.howTitle">Jak zacząć</h3>
       <div class="welcome-steps">
         <article><b>01</b><h4 data-i18n="welcome.step1.title">Wybierz pokój</h4><p data-i18n="welcome.step1.desc">Przełączaj pomieszczenia na pasku nad widokiem 3D.</p></article>
@@ -445,15 +454,15 @@
       <div class="kids-tip" id="kidsTutorialTip"></div>
       <div class="kids-tutorial-actions"><button class="small-btn" id="kidsTutorialBack" data-i18n="kids.back">Wstecz</button><button class="primary-btn" id="kidsTutorialNext" data-i18n="kids.next">Dalej</button></div>
     </div>
+
+    <div class="modal-backdrop hidden" id="kidsLessonsModal">
+      <div class="modal wide kids-lessons-modal">
+        <div class="modal-header"><div><h2 data-i18n="kids.lessonsTitle">Mini-lekcje energii</h2><p class="modal-subtitle" data-i18n="kids.lessonsIntro">Wybierz temat i odkrywaj po kawałku.</p></div><button class="modal-close" data-close="kidsLessonsModal">✕</button></div>
+        <div class="modal-body"><div class="kids-lessons-grid" id="kidsLessonsGrid"></div></div>
+      </div>
+    </div>
   </div>
 </div>
-
-<!-- ============ DEBUG LOG PANEL ============ -->
-<div id="logPanel" class="log-panel hidden">
-  <div class="log-header"><span data-i18n="ui.log.title">Dziennik zdarzeń</span> <button id="closeLog">✕</button></div>
-  <div class="log-body" id="logBody"></div>
-</div>
-<button id="btnToggleLog" class="log-toggle" title="Debug log" data-i18n-title="ui.tip.debugLog">🖥</button>
 
 <!-- ================= LIBRARIES (CDN) ================= -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -465,7 +474,6 @@
 <script src="js/data/furniture.js"></script>
 <script src="js/data/solar.js"></script>
 <script src="js/data/battery.js"></script>
-<script src="js/data/electrical.js"></script>
 <script src="js/data/building.js"></script>
 <script src="js/i18n/dictionary.js"></script>
 <script src="js/i18n/catalog_en.js"></script>
@@ -478,7 +486,6 @@
 <script src="js/energy/SolarCalculator.js"></script>
 <script src="js/energy/WeatherSystem.js"></script>
 <script src="js/scene/DayNightCycle.js"></script>
-<script src="js/scene/WireRenderer.js"></script>
 <script src="js/scene/SceneManager.js"></script>
 <script src="js/scene/TextureFactory.js"></script>
 <script src="js/scene/RoomBuilder.js"></script>
@@ -486,7 +493,6 @@
 <script src="js/scene/ModelFactory.js"></script>
 <script src="js/scene/ObjectManager.js"></script>
 <script src="js/scene/TransformManager.js"></script>
-<script src="js/energy/ElectricalSystem.js"></script>
 <script src="js/energy/BuildingModel.js"></script>
 <script src="js/energy/SimulationEngine.js"></script>
 <script src="js/analytics/AnalyticsManager.js"></script>
@@ -499,7 +505,6 @@
 <script src="js/pet/AdvisorEngine.js"></script>
 <script src="js/project/ProjectManager.js"></script>
 <script src="js/ui/PriorityList.js"></script>
-<script src="js/ui/InstallationPanel.js"></script>
 <script src="js/ui/DesignerPanel.js"></script>
 <script src="js/ui/UIManager.js"></script>
 <script src="js/main.js"></script>

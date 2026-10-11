@@ -36,6 +36,24 @@ class TransformManager {
     dom.addEventListener('click', (e)=>this._onClick(e));
     dom.addEventListener('mousemove', (e)=>this._onMove(e));
     dom.addEventListener('dblclick', (e)=>this._onDblClick(e));
+    // Mobile browsers do not consistently synthesize a click after OrbitControls
+    // handles a touch. Pick on a stationary touch pointer-up as well.
+    this._touchStart = null;
+    this._ignoreClickUntil = 0;
+    dom.addEventListener('pointerdown', (e)=>{
+      if (e.pointerType !== 'touch') return;
+      this._touchStart = { x:e.clientX, y:e.clientY, pointerId:e.pointerId };
+    }, { passive:true });
+    dom.addEventListener('pointerup', (e)=>{
+      if (e.pointerType !== 'touch' || !this._touchStart || this.gizmo.dragging) return;
+      const start = this._touchStart;
+      this._touchStart = null;
+      const moved = Math.hypot(e.clientX-start.x, e.clientY-start.y);
+      if (moved > 12) return; // camera pan/orbit, not a tap
+      this._ignoreClickUntil = performance.now()+450;
+      this._onClick(e);
+    }, { passive:true });
+    dom.addEventListener('pointercancel', ()=>{ this._touchStart=null; }, { passive:true });
 
     sceneManager.onFrame(()=>{
       if (this.selectedId){
@@ -68,6 +86,7 @@ class TransformManager {
 
   _onClick(e){
     if (this.gizmo.dragging) return;
+    if (e.pointerType === 'mouse' && performance.now() < this._ignoreClickUntil) return;
     const id = this._pick(e);
     this.select(id);
   }
